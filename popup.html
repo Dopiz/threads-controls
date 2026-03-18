@@ -119,6 +119,66 @@
       outline: 2px solid #000;
       outline-offset: 2px;
     }
+
+    /* Color picker */
+    .color-picker {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .color-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      border: 1.5px solid #ddd;
+      cursor: pointer;
+      padding: 0;
+      background: repeating-conic-gradient(#e0e0e0 0% 25%, #fff 0% 50%) 50%/10px 10px;
+    }
+
+    .color-swatch.has-color {
+      background: var(--swatch-color);
+      border-color: var(--swatch-color);
+    }
+
+    .color-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 28px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.15);
+      padding: 6px;
+      gap: 4px;
+      z-index: 10;
+    }
+
+    .color-dropdown.open {
+      display: flex;
+    }
+
+    .color-option {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: 1.5px solid #ddd;
+      cursor: pointer;
+      padding: 0;
+      position: relative;
+    }
+
+    .color-option.transparent {
+      background: repeating-conic-gradient(#e0e0e0 0% 25%, #fff 0% 50%) 50%/10px 10px;
+    }
+
+    .color-option.selected::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 3px;
+      border: 2px solid #000;
+    }
   </style>
 </head>
 <body>
@@ -136,6 +196,16 @@
       </div>
       <div class="item-text">
         <div class="item-label">Text</div>
+      </div>
+      <div class="color-picker">
+        <button class="color-swatch" id="text-color-swatch" title="Highlight color"></button>
+        <div class="color-dropdown" id="text-color-dropdown">
+          <button class="color-option transparent" data-color="" title="None"></button>
+          <button class="color-option" data-color="rgba(250,204,21,0.35)" style="background:rgba(250,204,21,0.35)" title="Yellow"></button>
+          <button class="color-option" data-color="rgba(96,165,250,0.35)" style="background:rgba(96,165,250,0.35)" title="Blue"></button>
+          <button class="color-option" data-color="rgba(251,146,60,0.35)" style="background:rgba(251,146,60,0.35)" title="Orange"></button>
+          <button class="color-option" data-color="rgba(244,114,182,0.35)" style="background:rgba(244,114,182,0.35)" title="Pink"></button>
+        </div>
       </div>
       <label class="toggle">
         <input type="checkbox" id="toggle-text" checked>
