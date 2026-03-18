@@ -27,7 +27,6 @@ toggleMedia.addEventListener('change', () => {
   chrome.storage.sync.set({ revealMedia: toggleMedia.checked });
 });
 
-// Color picker
 swatch.addEventListener('click', (e) => {
   e.stopPropagation();
   dropdown.classList.toggle('open');

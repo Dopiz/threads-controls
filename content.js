@@ -68,17 +68,40 @@ function enableVideoControls() {
       video.volume = settings.defaultVolume / 100;
     }
 
-    // Hide overlays scoped to this video's container
-    const container = video.closest('div[role="button"]') ?? video.parentElement;
-    if (!container) continue;
-    for (const group of container.querySelectorAll('div[role="group"]')) {
-      if (group.dataset.overlayHidden === 'true') continue;
-      if (getComputedStyle(group).position !== 'absolute') continue;
-      if (!group.querySelector('svg[aria-label]')) continue;
-      group.dataset.overlayHidden = 'true';
-      group.style.pointerEvents = 'none';
-      group.style.display = 'none';
+    if (video.dataset.overlayCleared === 'true') continue;
+    const videoRect = video.getBoundingClientRect();
+    if (videoRect.width === 0) continue;
+    const cx = videoRect.left + videoRect.width / 2;
+    const midY = videoRect.top + videoRect.height / 2;
+    if (cx < 0 || cx > window.innerWidth || midY < 0 || midY > window.innerHeight) continue;
+
+    for (const py of [midY, videoRect.bottom - 15]) {
+      let el = document.elementFromPoint(cx, py);
+      let attempts = 0;
+      while (el && el !== video && el.tagName !== 'VIDEO' && attempts < 10) {
+        if (el.contains(video)) break;
+        el.style.pointerEvents = 'none';
+        el = document.elementFromPoint(cx, py);
+        attempts++;
+      }
     }
+
+    let muteFound = false;
+    let ancestor = video.parentElement;
+    for (let i = 0; i < 10 && ancestor && !muteFound; i++) {
+      for (const group of ancestor.querySelectorAll('div[role="group"]')) {
+        if (group.dataset.muteHidden === 'true') continue;
+        if (getComputedStyle(group).position !== 'absolute') continue;
+        if (!group.querySelector('svg[aria-label]')) continue;
+        group.dataset.muteHidden = 'true';
+        group.style.display = 'none';
+        muteFound = true;
+        break;
+      }
+      ancestor = ancestor.parentElement;
+    }
+
+    video.dataset.overlayCleared = 'true';
   }
 }
 
@@ -94,4 +117,6 @@ function observePageChanges() {
     childList: true,
     subtree: true
   });
+
+  document.addEventListener('scroll', scheduleReveal, { capture: true, passive: true });
 }
