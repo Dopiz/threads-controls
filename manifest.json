@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Threads Auto Reveal",
-  "version": "1.3.0",
+  "version": "2.0.1",
   "description": "Auto-reveal hidden spoilers on Threads (text, images & videos)",
   "icons": {
     "16": "icon.png",

@@ -25,6 +25,12 @@
       letter-spacing: -0.2px;
     }
 
+    .header-version {
+      font-size: 11px;
+      font-weight: 400;
+      color: #999;
+    }
+
     .header-subtitle {
       font-size: 12px;
       color: #888;
@@ -178,21 +184,77 @@
       inset: 0;
       border-radius: 3px;
       border: 2px solid #000;
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 12px 16px 4px;
+    }
+
+    .section + .section {
+      border-top: 1px solid #f0f0f0;
+    }
+
+    /* Slider */
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px 12px;
+    }
+
+    .slider-row input[type="range"] {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #e0e0e0;
+      border-radius: 2px;
+      outline: none;
+    }
+
+    .slider-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #000;
+      cursor: pointer;
+    }
+
+    .slider-value {
+      font-size: 12px;
+      font-weight: 500;
+      color: #666;
+      min-width: 32px;
+      text-align: right;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="header-title">Threads Auto Reveal</div>
+    <div class="header-title">Threads Auto Reveal <span class="header-version" id="version"></span></div>
     <div class="header-subtitle">Choose what to reveal automatically</div>
   </div>
 
-  <div class="list">
-    <div class="item">
-      <div class="item-icon">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
-        </svg>
+  <div class="section">
+    <div class="section-title">Spoiler Reveal</div>
+    <div class="list">
+      <div class="item">
+        <div class="item-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>
+          </svg>
+        </div>
+        <div class="item-text">
+          <div class="item-label">Text</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-text" checked>
+          <span class="toggle-track"></span>
+        </label>
       </div>
       <div class="item-text">
         <div class="item-label">Text</div>
@@ -213,19 +275,57 @@
       </label>
     </div>
 
-    <div class="item">
-      <div class="item-icon">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
-        </svg>
+      <div class="item">
+        <div class="item-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+          </svg>
+        </div>
+        <div class="item-text">
+          <div class="item-label">Media</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-media" checked>
+          <span class="toggle-track"></span>
+        </label>
       </div>
-      <div class="item-text">
-        <div class="item-label">Media</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Video</div>
+    <div class="list">
+      <div class="item">
+        <div class="item-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+        </div>
+        <div class="item-text">
+          <div class="item-label">Show Controls</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-video" checked>
+          <span class="toggle-track"></span>
+        </label>
       </div>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-media" checked>
-        <span class="toggle-track"></span>
-      </label>
+
+      <div class="item">
+        <div class="item-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          </svg>
+        </div>
+        <div class="item-text">
+          <div class="item-label">Default Volume</div>
+        </div>
+      </div>
+      <div class="slider-row">
+        <input type="range" id="slider-volume" min="0" max="100" value="0">
+        <span class="slider-value" id="volume-value">0%</span>
+      </div>
     </div>
   </div>
 

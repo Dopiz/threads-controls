@@ -1,4 +1,4 @@
-const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '' };
+const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '', videoControls: true, defaultVolume: 0 };
 let settings = { ...DEFAULTS };
 let revealTimer = null;
 
@@ -19,6 +19,7 @@ function revealSpoilers() {
   const buttons = document.querySelectorAll('div[role="button"]');
   if (settings.revealText)  revealSpoilerText(buttons);
   if (settings.revealMedia) revealSpoilerMedia(buttons);
+  if (settings.videoControls) enableVideoControls();
 }
 
 function revealSpoilerText(buttons) {
@@ -59,15 +60,37 @@ function revealSpoilerMedia(buttons) {
   }
 }
 
-function observePageChanges() {
-  const observer = new MutationObserver(() => {
-    if (revealTimer) clearTimeout(revealTimer);
-    revealTimer = setTimeout(() => {
-      revealSpoilers();
-    }, 300);
-  });
+function enableVideoControls() {
+  for (const video of document.querySelectorAll('video')) {
+    if (video.dataset.controlsEnabled !== 'true') {
+      video.dataset.controlsEnabled = 'true';
+      video.controls = true;
+      video.volume = settings.defaultVolume / 100;
+    }
 
-  observer.observe(document.body, {
+    // Hide overlays scoped to this video's container
+    const container = video.closest('div[role="button"]') ?? video.parentElement;
+    if (!container) continue;
+    for (const group of container.querySelectorAll('div[role="group"]')) {
+      if (group.dataset.overlayHidden === 'true') continue;
+      if (getComputedStyle(group).position !== 'absolute') continue;
+      if (!group.querySelector('svg[aria-label]')) continue;
+      group.dataset.overlayHidden = 'true';
+      group.style.pointerEvents = 'none';
+      group.style.display = 'none';
+    }
+  }
+}
+
+function scheduleReveal() {
+  if (revealTimer) clearTimeout(revealTimer);
+  revealTimer = setTimeout(() => {
+    revealSpoilers();
+  }, 300);
+}
+
+function observePageChanges() {
+  new MutationObserver(scheduleReveal).observe(document.body, {
     childList: true,
     subtree: true
   });
