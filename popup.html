@@ -184,6 +184,8 @@
       inset: 0;
       border-radius: 3px;
       border: 2px solid #000;
+    }
+
     .section-title {
       font-size: 11px;
       font-weight: 600;
@@ -251,29 +253,21 @@
         <div class="item-text">
           <div class="item-label">Text</div>
         </div>
+        <div class="color-picker">
+          <button class="color-swatch" id="text-color-swatch" title="Highlight color"></button>
+          <div class="color-dropdown" id="text-color-dropdown">
+            <button class="color-option transparent" data-color="" title="None"></button>
+            <button class="color-option" data-color="rgba(250,204,21,0.35)" style="background:rgba(250,204,21,0.35)" title="Yellow"></button>
+            <button class="color-option" data-color="rgba(96,165,250,0.35)" style="background:rgba(96,165,250,0.35)" title="Blue"></button>
+            <button class="color-option" data-color="rgba(251,146,60,0.35)" style="background:rgba(251,146,60,0.35)" title="Orange"></button>
+            <button class="color-option" data-color="rgba(244,114,182,0.35)" style="background:rgba(244,114,182,0.35)" title="Pink"></button>
+          </div>
+        </div>
         <label class="toggle">
           <input type="checkbox" id="toggle-text" checked>
           <span class="toggle-track"></span>
         </label>
       </div>
-      <div class="item-text">
-        <div class="item-label">Text</div>
-      </div>
-      <div class="color-picker">
-        <button class="color-swatch" id="text-color-swatch" title="Highlight color"></button>
-        <div class="color-dropdown" id="text-color-dropdown">
-          <button class="color-option transparent" data-color="" title="None"></button>
-          <button class="color-option" data-color="rgba(250,204,21,0.35)" style="background:rgba(250,204,21,0.35)" title="Yellow"></button>
-          <button class="color-option" data-color="rgba(96,165,250,0.35)" style="background:rgba(96,165,250,0.35)" title="Blue"></button>
-          <button class="color-option" data-color="rgba(251,146,60,0.35)" style="background:rgba(251,146,60,0.35)" title="Orange"></button>
-          <button class="color-option" data-color="rgba(244,114,182,0.35)" style="background:rgba(244,114,182,0.35)" title="Pink"></button>
-        </div>
-      </div>
-      <label class="toggle">
-        <input type="checkbox" id="toggle-text" checked>
-        <span class="toggle-track"></span>
-      </label>
-    </div>
 
       <div class="item">
         <div class="item-icon">
