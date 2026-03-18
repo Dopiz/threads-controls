@@ -1,4 +1,4 @@
-const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '' };
+const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '', videoControls: true, defaultVolume: 0 };
 let settings = { ...DEFAULTS };
 let revealTimer = null;
 
@@ -19,6 +19,7 @@ function revealSpoilers() {
   const buttons = document.querySelectorAll('div[role="button"]');
   if (settings.revealText)  revealSpoilerText(buttons);
   if (settings.revealMedia) revealSpoilerMedia(buttons);
+  if (settings.videoControls) enableVideoControls();
 }
 
 function revealSpoilerText(buttons) {
@@ -59,16 +60,63 @@ function revealSpoilerMedia(buttons) {
   }
 }
 
-function observePageChanges() {
-  const observer = new MutationObserver(() => {
-    if (revealTimer) clearTimeout(revealTimer);
-    revealTimer = setTimeout(() => {
-      revealSpoilers();
-    }, 300);
-  });
+function enableVideoControls() {
+  for (const video of document.querySelectorAll('video')) {
+    if (video.dataset.controlsEnabled !== 'true') {
+      video.dataset.controlsEnabled = 'true';
+      video.controls = true;
+      video.volume = settings.defaultVolume / 100;
+    }
 
-  observer.observe(document.body, {
+    if (video.dataset.overlayCleared === 'true') continue;
+    const videoRect = video.getBoundingClientRect();
+    if (videoRect.width === 0) continue;
+    const cx = videoRect.left + videoRect.width / 2;
+    const midY = videoRect.top + videoRect.height / 2;
+    if (cx < 0 || cx > window.innerWidth || midY < 0 || midY > window.innerHeight) continue;
+
+    for (const py of [midY, videoRect.bottom - 15]) {
+      let el = document.elementFromPoint(cx, py);
+      let attempts = 0;
+      while (el && el !== video && el.tagName !== 'VIDEO' && attempts < 10) {
+        if (el.contains(video)) break;
+        el.style.pointerEvents = 'none';
+        el = document.elementFromPoint(cx, py);
+        attempts++;
+      }
+    }
+
+    let muteFound = false;
+    let ancestor = video.parentElement;
+    for (let i = 0; i < 10 && ancestor && !muteFound; i++) {
+      for (const group of ancestor.querySelectorAll('div[role="group"]')) {
+        if (group.dataset.muteHidden === 'true') continue;
+        if (getComputedStyle(group).position !== 'absolute') continue;
+        if (!group.querySelector('svg[aria-label]')) continue;
+        group.dataset.muteHidden = 'true';
+        group.style.display = 'none';
+        muteFound = true;
+        break;
+      }
+      ancestor = ancestor.parentElement;
+    }
+
+    video.dataset.overlayCleared = 'true';
+  }
+}
+
+function scheduleReveal() {
+  if (revealTimer) clearTimeout(revealTimer);
+  revealTimer = setTimeout(() => {
+    revealSpoilers();
+  }, 300);
+}
+
+function observePageChanges() {
+  new MutationObserver(scheduleReveal).observe(document.body, {
     childList: true,
     subtree: true
   });
+
+  document.addEventListener('scroll', scheduleReveal, { capture: true, passive: true });
 }
