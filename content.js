@@ -1,4 +1,4 @@
-const DEFAULTS = { revealText: true, revealMedia: true };
+const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '' };
 let settings = { ...DEFAULTS };
 let revealTimer = null;
 
@@ -37,7 +37,13 @@ function revealSpoilerText(buttons) {
 
     button.dataset.spoilerRevealed = 'true';
     try {
-      button.parentNode.replaceChild(span.cloneNode(true), button);
+      const revealed = span.cloneNode(true);
+      if (settings.textHighlight) {
+        revealed.style.backgroundColor = settings.textHighlight;
+        revealed.style.borderRadius = '4px';
+        revealed.style.padding = '0 2px';
+      }
+      button.parentNode.replaceChild(revealed, button);
     } catch (e) {}
   }
 }
