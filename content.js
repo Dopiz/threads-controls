@@ -1,4 +1,4 @@
-const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '', videoControls: true, defaultVolume: 0 };
+const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '', videoControls: true, defaultVolume: 10 };
 let settings = { ...DEFAULTS };
 let revealTimer = null;
 
@@ -30,15 +30,15 @@ function revealSpoilerText(buttons) {
     if (!button.closest('span[dir="auto"]')) continue;
     if (style.backgroundColor === 'rgba(0, 0, 0, 0)' || style.backgroundColor === 'transparent') continue;
 
-    const innerDiv = button.querySelector(':scope > div');
-    if (!innerDiv) continue;
-
-    const span = innerDiv.querySelector(':scope > span');
-    if (!span) continue;
+    const spoilerSpan = button.querySelector('span[data-text-fragment="spoiler"]');
+    const innerSpan = spoilerSpan
+      ? spoilerSpan.querySelector('span')
+      : button.querySelector(':scope > div > span');
+    if (!innerSpan) continue;
 
     button.dataset.spoilerRevealed = 'true';
     try {
-      const revealed = span.cloneNode(true);
+      const revealed = innerSpan.cloneNode(true);
       if (settings.textHighlight) {
         revealed.style.backgroundColor = settings.textHighlight;
         revealed.style.borderRadius = '4px';
