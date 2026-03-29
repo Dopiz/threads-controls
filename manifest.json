@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Threads Auto Reveal",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Auto-reveal hidden spoilers on Threads (text & media), and enable video controls.",
   "icons": {
     "16": "icon.png",
