@@ -65,6 +65,7 @@ function enableVideoControls() {
     if (video.dataset.controlsEnabled !== 'true') {
       video.dataset.controlsEnabled = 'true';
       video.controls = true;
+      video.style.objectFit = 'contain';
       video.volume = settings.defaultVolume / 100;
     }
 
