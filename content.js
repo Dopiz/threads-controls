@@ -23,6 +23,7 @@ function revealSpoilers() {
 }
 
 function revealSpoilerText(buttons) {
+  // Strategy 1 (legacy DOM): outer button carries the grey background mask
   for (const button of buttons) {
     if (button.dataset.spoilerRevealed === 'true') continue;
     const style = getComputedStyle(button);
@@ -37,16 +38,43 @@ function revealSpoilerText(buttons) {
     if (!innerSpan) continue;
 
     button.dataset.spoilerRevealed = 'true';
-    try {
-      const revealed = innerSpan.cloneNode(true);
-      if (settings.textHighlight) {
-        revealed.style.backgroundColor = settings.textHighlight;
-        revealed.style.borderRadius = '4px';
-        revealed.style.padding = '0 2px';
-      }
-      button.parentNode.replaceChild(revealed, button);
-    } catch (e) {}
+    swapSpoiler(button, innerSpan);
   }
+
+  // Strategy 2 (newer DOM): outer button has transparent bg; anchor on data-text-fragment
+  for (const spoilerSpan of document.querySelectorAll('span[data-text-fragment="spoiler"]')) {
+    if (spoilerSpan.dataset.spoilerRevealed === 'true') continue;
+    if (!spoilerSpan.closest('span[dir="auto"]')) continue;
+
+    const innerSpan = spoilerSpan.querySelector('span');
+    if (!innerSpan) continue;
+
+    const target = spoilerSpan.closest('[role="button"]') || spoilerSpan;
+    spoilerSpan.dataset.spoilerRevealed = 'true';
+    swapSpoiler(target, innerSpan);
+  }
+}
+
+function swapSpoiler(target, innerSpan) {
+  try {
+    const revealed = innerSpan.cloneNode(true);
+    if (settings.textHighlight) {
+      revealed.style.backgroundColor = settings.textHighlight;
+      revealed.style.borderRadius = '4px';
+      revealed.style.padding = '0 2px';
+    }
+    // Newer Threads paints the particle/grain effect via a sibling <canvas>; remove it too
+    let node = target.parentElement;
+    for (let i = 0; i < 5 && node; i++) {
+      const canvases = node.querySelectorAll(':scope > canvas');
+      if (canvases.length) {
+        canvases.forEach(c => c.remove());
+        break;
+      }
+      node = node.parentElement;
+    }
+    target.parentNode.replaceChild(revealed, target);
+  } catch (e) {}
 }
 
 function revealSpoilerMedia(buttons) {
@@ -65,8 +93,14 @@ function enableVideoControls() {
     if (video.dataset.controlsEnabled !== 'true') {
       video.dataset.controlsEnabled = 'true';
       video.controls = true;
-      video.style.objectFit = 'contain';
+      video.style.objectFit = 'cover';
       video.volume = settings.defaultVolume / 100;
+      const onFs = () => {
+        const fs = document.fullscreenElement || document.webkitFullscreenElement;
+        video.style.objectFit = fs === video ? 'contain' : 'cover';
+      };
+      document.addEventListener('fullscreenchange', onFs);
+      document.addEventListener('webkitfullscreenchange', onFs);
     }
 
     if (video.dataset.overlayCleared === 'true') continue;
