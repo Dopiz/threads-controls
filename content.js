@@ -136,6 +136,22 @@ function enableVideoControls() {
       ancestor = ancestor.parentElement;
     }
 
+    // Hide the platform's own seek/progress slider — the native control bar
+    // already provides one, so it would otherwise sit on top of it.
+    let seekFound = false;
+    ancestor = video.parentElement;
+    for (let i = 0; i < 12 && ancestor && !seekFound; i++) {
+      for (const slider of ancestor.querySelectorAll('div[role="slider"]')) {
+        if (slider.dataset.seekHidden === 'true') continue;
+        if (!/position/i.test(slider.getAttribute('aria-label') || '')) continue;
+        slider.dataset.seekHidden = 'true';
+        slider.style.display = 'none';
+        seekFound = true;
+        break;
+      }
+      ancestor = ancestor.parentElement;
+    }
+
     video.dataset.overlayCleared = 'true';
   }
 }

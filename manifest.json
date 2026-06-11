@@ -18,7 +18,9 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.threads.com/*"
+        "https://www.threads.com/*",
+        "https://www.instagram.com/*",
+        "https://www.facebook.com/*"
       ],
       "js": [
         "content.js"
