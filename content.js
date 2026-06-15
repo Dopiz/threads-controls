@@ -101,6 +101,24 @@ function enableVideoControls() {
       };
       document.addEventListener('fullscreenchange', onFs);
       document.addEventListener('webkitfullscreenchange', onFs);
+
+      // Seeking via the native control bar makes the platform fire a fresh play()
+      // that re-applies muted=true and volume=1. Snapshot the sound state when a
+      // seek starts, and if the platform mutes us within a moment, undo it so the
+      // current video keeps playing as the user left it. Per-video only — a brand
+      // new video still starts muted, so this does not remember state across clips.
+      video.addEventListener('seeking', () => {
+        video.dataset.seekMuted = video.muted ? '1' : '0';
+        video.dataset.seekVolume = String(video.volume);
+        video.dataset.seekAt = String(Date.now());
+      });
+      video.addEventListener('volumechange', () => {
+        if (!video.muted) return;
+        if (video.dataset.seekMuted !== '0') return;
+        if (Date.now() - Number(video.dataset.seekAt || 0) > 1000) return;
+        video.muted = false;
+        video.volume = Number(video.dataset.seekVolume);
+      });
     }
 
     if (video.dataset.overlayCleared === 'true') continue;
