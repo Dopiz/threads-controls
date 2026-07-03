@@ -95,6 +95,9 @@ function enableVideoControls() {
       video.controls = true;
       video.style.objectFit = 'cover';
       video.volume = settings.defaultVolume / 100;
+      video.dataset.desiredVolume = String(settings.defaultVolume / 100);
+      video.dataset.prevMuted = video.muted ? '1' : '0';
+
       const onFs = () => {
         const fs = document.fullscreenElement || document.webkitFullscreenElement;
         video.style.objectFit = fs === video ? 'contain' : 'cover';
@@ -102,23 +105,60 @@ function enableVideoControls() {
       document.addEventListener('fullscreenchange', onFs);
       document.addEventListener('webkitfullscreenchange', onFs);
 
-      // Seeking via the native control bar makes the platform fire a fresh play()
-      // that re-applies muted=true and volume=1. Snapshot the sound state when a
-      // seek starts, and if the platform mutes us within a moment, undo it so the
-      // current video keeps playing as the user left it. Per-video only — a brand
-      // new video still starts muted, so this does not remember state across clips.
-      video.addEventListener('seeking', () => {
-        video.dataset.seekMuted = video.muted ? '1' : '0';
-        video.dataset.seekVolume = String(video.volume);
-        video.dataset.seekAt = String(Date.now());
-      });
+      video.addEventListener('seeking', () => { video.dataset.seekAt = String(Date.now()); });
+
+      // Keep the sound behaving predictably against the platform, which likes to
+      // force muted=true / volume=100% (e.g. on unmute or after a native seek).
+      // "desiredVolume" tracks the user's chosen level (starts at the default and
+      // only updates on a genuine slider drag). Per-video, transient — a brand new
+      // clip still starts muted at the default, so nothing is remembered across clips.
+      const applySound = (fn) => { video.dataset.applyingSound = '1'; fn(); video.dataset.applyingSound = ''; };
       video.addEventListener('volumechange', () => {
-        if (!video.muted) return;
-        if (video.dataset.seekMuted !== '0') return;
-        if (Date.now() - Number(video.dataset.seekAt || 0) > 1000) return;
-        video.muted = false;
-        video.volume = Number(video.dataset.seekVolume);
+        if (video.dataset.applyingSound === '1') return;
+        const desired = Number(video.dataset.desiredVolume);
+        const prevMuted = video.dataset.prevMuted === '1';
+        const offDesired = Math.abs(video.volume - desired) > 0.005;
+
+        if (video.muted) {
+          // A native-control seek makes the platform re-mute; undo it to keep sound.
+          if (!prevMuted && Date.now() - Number(video.dataset.seekAt || 0) < 1000) {
+            video.dataset.unmuteAt = String(Date.now());
+            applySound(() => { video.muted = false; video.volume = desired; });
+          }
+        } else if (prevMuted) {
+          // Just unmuted (user click, or platform after a seek): the platform tends
+          // to jump volume to 100%, so pin it back to the user's desired level.
+          video.dataset.unmuteAt = String(Date.now());
+          if (offDesired) applySound(() => { video.volume = desired; });
+        } else if (Date.now() - Number(video.dataset.unmuteAt || 0) < 600) {
+          // Platform's delayed volume bump right after an unmute → pin to desired.
+          if (offDesired) applySound(() => { video.volume = desired; });
+        } else if (offDesired) {
+          // Genuine user slider drag → remember it as the new desired volume.
+          video.dataset.desiredVolume = String(video.volume);
+        }
+        video.dataset.prevMuted = video.muted ? '1' : '0';
       });
+    }
+
+    // Hide the platform's redundant mute toggle (native controls provide one). It
+    // can render lazily, so retry each pass until we find and hide it.
+    if (video.dataset.muteBtnHidden !== 'true') {
+      let a = video.parentElement;
+      for (let i = 0; i < 10 && a; i++) {
+        const svg = [...a.querySelectorAll('svg[aria-label]')]
+          .find(s => /靜音|mute/i.test(s.getAttribute('aria-label')));
+        if (svg) {
+          const target = svg.closest('div[role="group"]') || svg.closest('div[role="button"]')
+            || (svg.parentElement && svg.parentElement.parentElement);
+          if (target) {
+            target.style.display = 'none';
+            video.dataset.muteBtnHidden = 'true';
+          }
+          break;
+        }
+        a = a.parentElement;
+      }
     }
 
     if (video.dataset.overlayCleared === 'true') continue;
@@ -139,25 +179,10 @@ function enableVideoControls() {
       }
     }
 
-    let muteFound = false;
-    let ancestor = video.parentElement;
-    for (let i = 0; i < 10 && ancestor && !muteFound; i++) {
-      for (const group of ancestor.querySelectorAll('div[role="group"]')) {
-        if (group.dataset.muteHidden === 'true') continue;
-        if (getComputedStyle(group).position !== 'absolute') continue;
-        if (!group.querySelector('svg[aria-label]')) continue;
-        group.dataset.muteHidden = 'true';
-        group.style.display = 'none';
-        muteFound = true;
-        break;
-      }
-      ancestor = ancestor.parentElement;
-    }
-
     // Hide the platform's own seek/progress slider — the native control bar
     // already provides one, so it would otherwise sit on top of it.
     let seekFound = false;
-    ancestor = video.parentElement;
+    let ancestor = video.parentElement;
     for (let i = 0; i < 12 && ancestor && !seekFound; i++) {
       for (const slider of ancestor.querySelectorAll('div[role="slider"]')) {
         if (slider.dataset.seekHidden === 'true') continue;
