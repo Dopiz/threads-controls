@@ -88,7 +88,30 @@ function revealSpoilerMedia(buttons) {
   }
 }
 
+// Hide the platform's own mute toggle — native controls already provide one.
+// The icon differs by surface: logged-out uses svg[aria-label], logged-in puts
+// the label in an inner <title>; both sit inside a role="button". We hide that
+// button via an injected !important class so a platform hover/re-render that sets
+// an inline display can't bring it back, and re-tag every pass in case React
+// swaps the node.
+function hidePlatformMuteButtons() {
+  if (!document.getElementById('tar-mute-style')) {
+    const style = document.createElement('style');
+    style.id = 'tar-mute-style';
+    style.textContent = '.tar-hide-mute{display:none !important;}';
+    (document.head || document.documentElement).appendChild(style);
+  }
+  for (const svg of document.querySelectorAll('svg')) {
+    const title = svg.querySelector('title');
+    const label = svg.getAttribute('aria-label') || (title && title.textContent) || '';
+    if (!/靜音|mute/i.test(label)) continue;
+    const button = svg.closest('div[role="button"]');
+    if (button && !button.classList.contains('tar-hide-mute')) button.classList.add('tar-hide-mute');
+  }
+}
+
 function enableVideoControls() {
+  hidePlatformMuteButtons();
   for (const video of document.querySelectorAll('video')) {
     if (video.dataset.controlsEnabled !== 'true') {
       video.dataset.controlsEnabled = 'true';
@@ -139,26 +162,6 @@ function enableVideoControls() {
         }
         video.dataset.prevMuted = video.muted ? '1' : '0';
       });
-    }
-
-    // Hide the platform's redundant mute toggle (native controls provide one). It
-    // can render lazily, so retry each pass until we find and hide it.
-    if (video.dataset.muteBtnHidden !== 'true') {
-      let a = video.parentElement;
-      for (let i = 0; i < 10 && a; i++) {
-        const svg = [...a.querySelectorAll('svg[aria-label]')]
-          .find(s => /靜音|mute/i.test(s.getAttribute('aria-label')));
-        if (svg) {
-          const target = svg.closest('div[role="group"]') || svg.closest('div[role="button"]')
-            || (svg.parentElement && svg.parentElement.parentElement);
-          if (target) {
-            target.style.display = 'none';
-            video.dataset.muteBtnHidden = 'true';
-          }
-          break;
-        }
-        a = a.parentElement;
-      }
     }
 
     if (video.dataset.overlayCleared === 'true') continue;
