@@ -18,6 +18,18 @@
   "content_scripts": [
     {
       "matches": [
+        "https://www.threads.com/*",
+        "https://www.instagram.com/*",
+        "https://www.facebook.com/*"
+      ],
+      "js": [
+        "src/volume-guard.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "https://www.threads.com/*"
       ],
       "js": [

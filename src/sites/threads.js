@@ -105,7 +105,10 @@ function clipControlBarStrip(video) {
   const cx = rect.left + rect.width / 2;
   const barY = rect.bottom - 15;
   if (cx < 0 || cx > window.innerWidth || barY < 0 || barY > window.innerHeight) return;
-  const stripTop = rect.bottom - 40;
+  // On narrow videos Chrome lays the controls out as two rows (buttons row
+  // above the timeline), together ~60px tall — the strip must cover both or
+  // moving from the timeline up to a button loses hover and hides the bar.
+  const stripTop = rect.bottom - 60;
   for (const el of document.elementsFromPoint(cx, barY)) {
     if (el === video || el.tagName === 'VIDEO' || el.contains(video)) break;
     const clipBottom = el.getBoundingClientRect().bottom - stripTop;
