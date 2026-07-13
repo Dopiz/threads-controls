@@ -153,12 +153,17 @@ function findInfoOverlays(video) {
     for (const el of divs) {
       if (el.contains(video)) continue;
       if (found.some(f => f.contains(el) || el.contains(f))) continue;
-      if (isPlayerChrome(el, videoRect)) {
+      const style = getComputedStyle(el);
+      // Hiding the whole player chrome is only safe while it is non-interactive
+      // (pointer-events:none) — an interactive group (e.g. Threads') carries
+      // the platform's gestures, and hiding it would swallow them. FB toggles
+      // the group's pointer-events with player state, so when it is interactive
+      // we fall through to the bottom-anchored info-block match below instead.
+      if (style.pointerEvents === 'none' && isPlayerChrome(el, videoRect)) {
         found.push(el);
         continue;
       }
-      const style = getComputedStyle(el);
-      if (style.position !== 'absolute' || style.pointerEvents !== 'none') continue;
+      if (style.position !== 'absolute') continue;
       const rect = el.getBoundingClientRect();
       if (rect.width < videoRect.width * 0.5) continue;
       // bottom-anchored block only — never a full-cover wrapper
@@ -243,9 +248,13 @@ function enableVideoControls() {
       setupInfoOverlayHover(video);
     }
 
-    if (video.dataset.overlayCleared === 'true') continue;
+    // Re-run whenever the video is re-laid-out (e.g. reused by the media
+    // viewer/lightbox at a new size) — the covering overlays are fresh
+    // elements there and need clipping again.
     const videoRect = video.getBoundingClientRect();
     if (videoRect.width === 0) continue;
+    const overlaySig = Math.round(videoRect.width) + 'x' + Math.round(videoRect.height);
+    if (video.dataset.overlaySig === overlaySig) continue;
     const cx = videoRect.left + videoRect.width / 2;
     const barY = videoRect.bottom - 15;
     if (cx < 0 || cx > window.innerWidth || barY < 0 || barY > window.innerHeight) continue;
@@ -278,7 +287,7 @@ function enableVideoControls() {
       ancestor = ancestor.parentElement;
     }
 
-    video.dataset.overlayCleared = 'true';
+    video.dataset.overlaySig = overlaySig;
   }
 }
 
