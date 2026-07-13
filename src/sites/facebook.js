@@ -12,8 +12,8 @@
 // every pass in case React re-renders the node. The chrome fades in/out in step
 // with the native controls so the two transitions share the same rhythm.
 const FB_STYLE = [
-  '.tar-fb-chrome { height: calc(100% - 60px) !important; visibility: hidden; opacity: 0; transition: opacity 0.2s ease, visibility 0.2s; pointer-events: none !important; }',
-  '.tar-fb-chrome.tar-fb-show { visibility: visible; opacity: 1; }',
+  '.tar-fb-chrome { height: calc(100% - 60px) !important; visibility: hidden; opacity: 0; transition: opacity 0.3s ease, visibility 0.3s; pointer-events: none !important; }',
+  '.tar-fb-chrome.tar-fb-show { visibility: visible; opacity: 1; transition: opacity 0.1s ease, visibility 0.1s; }',
   '.tar-fb-chrome.tar-fb-show a[role="link"], .tar-fb-chrome.tar-fb-show div[role="button"] { pointer-events: auto; }',
   '.tar-fb-chrome::after { content: \'\'; position: absolute; left: 0; right: 0;',
   '  bottom: -60px; height: 60px; pointer-events: none;',
