@@ -9,7 +9,7 @@
     "128": "icon.png"
   },
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "src/popup/popup.html",
     "default_icon": "icon.png"
   },
   "permissions": [
@@ -18,12 +18,31 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.threads.com/*",
-        "https://www.instagram.com/*",
+        "https://www.threads.com/*"
+      ],
+      "js": [
+        "src/common.js",
+        "src/sites/threads.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "src/common.js",
+        "src/sites/instagram.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
         "https://www.facebook.com/*"
       ],
       "js": [
-        "content.js"
+        "src/common.js",
+        "src/sites/facebook.js"
       ],
       "run_at": "document_idle"
     }
