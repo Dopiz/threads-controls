@@ -56,6 +56,15 @@ chrome.storage.onChanged.addListener((changes) => {
   TAR.runPasses();
 });
 
+// Inject a <style> with the given id once; no-op if it already exists.
+TAR.ensureStyle = function (id, css) {
+  if (document.getElementById(id)) return;
+  const style = document.createElement('style');
+  style.id = id;
+  style.textContent = css;
+  (document.head || document.documentElement).appendChild(style);
+};
+
 // Hide the platform's own mute toggle — native controls already provide one.
 // The icon differs by surface: logged-out uses svg[aria-label], logged-in puts
 // the label in an inner <title>; both sit inside a role="button". We hide that
@@ -63,13 +72,15 @@ chrome.storage.onChanged.addListener((changes) => {
 // an inline display can't bring it back, and re-tag every pass in case React
 // swaps the node.
 TAR.hidePlatformMuteButtons = function () {
-  if (!document.getElementById('tar-mute-style')) {
-    const style = document.createElement('style');
-    style.id = 'tar-mute-style';
-    style.textContent = '.tar-hide-mute{display:none !important;}';
-    (document.head || document.documentElement).appendChild(style);
-  }
-  for (const svg of document.querySelectorAll('svg')) {
+  TAR.ensureStyle('tar-mute-style', '.tar-hide-mute{display:none !important;}');
+  // The platform mute button lives inside the Video player group on all three
+  // sites. Scan only those groups' svgs (a page has hundreds of icons and this
+  // runs every 300ms); fall back to a full-page scan on older DOM without them.
+  const groups = document.querySelectorAll('div[aria-label="Video player"]');
+  const svgs = groups.length
+    ? Array.from(groups, (g) => g.querySelectorAll('svg')).flatMap((n) => Array.from(n))
+    : document.querySelectorAll('svg');
+  for (const svg of svgs) {
     const title = svg.querySelector('title');
     const label = svg.getAttribute('aria-label') || (title && title.textContent) || '';
     if (!/靜音|mute/i.test(label)) continue;
@@ -96,14 +107,15 @@ TAR.findPlayerChrome = function (video) {
   return found;
 };
 
-// Install once: while the pointer is over a native-controlled video, hide the
-// div[aria-label="Video player"] chrome (caption/owner info, top bar) so it does
-// not sit on top of the native control bar; restore on leave. React may swap the
-// nodes, so we re-find on every enter; restoring a detached node is harmless.
-let hoverChromeInstalled = false;
-TAR.installHoverChromeHide = function () {
-  if (hoverChromeInstalled) return;
-  hoverChromeInstalled = true;
+// Install once: on pointer move, for every native-controlled video, call the
+// callback with (video, inside) where inside is whether the pointer is over the
+// video. The callback fires on every throttled tick (not just on enter/leave
+// transitions), so it must track its own enter/exit state. Each site registers
+// exactly one callback (one site per page), so a single once-guard suffices.
+let hoverWatcherInstalled = false;
+TAR.watchHover = function (callback) {
+  if (hoverWatcherInstalled) return;
+  hoverWatcherInstalled = true;
   let lastMove = 0;
   document.addEventListener('mousemove', (e) => {
     const now = Date.now();
@@ -111,23 +123,31 @@ TAR.installHoverChromeHide = function () {
     lastMove = now;
     for (const video of document.querySelectorAll('video')) {
       if (video.controls !== true) continue;
-      // Opt-out (e.g. Threads carousel thumbnails): the chrome carries the
-      // platform's drag gesture, so it must stay visible and interactive.
-      if (video.dataset.tarKeepChrome === '1') continue;
       const rect = video.getBoundingClientRect();
       const inside = e.clientX >= rect.left && e.clientX <= rect.right &&
         e.clientY >= rect.top && e.clientY <= rect.bottom;
-      if (inside && !video._tarChrome) {
-        const chrome = TAR.findPlayerChrome(video);
-        for (const el of chrome) el.style.visibility = 'hidden';
-        video._tarChrome = chrome;
-      } else if (!inside && video._tarChrome) {
-        for (const el of video._tarChrome) el.style.visibility = '';
-        video._tarChrome = null;
-      }
+      callback(video, inside);
     }
   }, { capture: true });
 };
+
+// Single shared fullscreen handler (installed once at module load). Per-video
+// listeners on document would accumulate and pin detached videos in their
+// closures for the life of the session.
+let fullscreenVideo = null;
+const onFullscreenChange = () => {
+  const fs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fullscreenVideo && fullscreenVideo !== fs) {
+    fullscreenVideo.style.objectFit = 'cover';
+    fullscreenVideo = null;
+  }
+  if (fs && fs.tagName === 'VIDEO' && fs.dataset.controlsEnabled === 'true') {
+    fullscreenVideo = fs;
+    fs.style.objectFit = 'contain';
+  }
+};
+document.addEventListener('fullscreenchange', onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
 TAR.enableNativeControls = function (video) {
   video.controls = true;
@@ -137,13 +157,6 @@ TAR.enableNativeControls = function (video) {
   video.volume = TAR.settings.defaultVolume / 100;
   video.dataset.desiredVolume = String(TAR.settings.defaultVolume / 100);
   video.dataset.prevMuted = video.muted ? '1' : '0';
-
-  const onFs = () => {
-    const fs = document.fullscreenElement || document.webkitFullscreenElement;
-    video.style.objectFit = fs === video ? 'contain' : 'cover';
-  };
-  document.addEventListener('fullscreenchange', onFs);
-  document.addEventListener('webkitfullscreenchange', onFs);
 
   video.addEventListener('seeking', () => { video.dataset.seekAt = String(Date.now()); });
 
@@ -184,8 +197,6 @@ TAR.enableNativeControls = function (video) {
     }
     video.dataset.prevMuted = video.muted ? '1' : '0';
   });
-
-  TAR.installHoverChromeHide();
 };
 
 TAR.disableNativeControls = function (video) {

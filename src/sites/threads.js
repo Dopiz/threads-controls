@@ -120,9 +120,26 @@ function clipControlBarStrip(video) {
   video.dataset.clipSig = sig;
 }
 
+// Single-video posts hover-hide the whole player chrome (caption/owner info,
+// top bar) so it does not sit on the native control bar; carousel/lightbox
+// videos opt out via tarKeepChrome (their chrome carries the drag gesture).
+// Fires on every throttled tick, so it tracks its own enter/exit state.
+function hoverHideChrome(video, inside) {
+  if (video.dataset.tarKeepChrome === '1') return;
+  if (inside && !video._tarChrome) {
+    const chrome = TAR.findPlayerChrome(video);
+    for (const el of chrome) el.style.visibility = 'hidden';
+    video._tarChrome = chrome;
+  } else if (!inside && video._tarChrome) {
+    for (const el of video._tarChrome) el.style.visibility = '';
+    video._tarChrome = null;
+  }
+}
+
 function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
   TAR.hidePlatformMuteButtons();
+  TAR.watchHover(hoverHideChrome);
   for (const video of document.querySelectorAll('video')) {
     const rect = video.getBoundingClientRect();
     if (rect.width === 0) continue;
@@ -135,27 +152,18 @@ function videoPass() {
       TAR.disableNativeControls(video);
       continue;
     }
-    if (mainPlayer && centered) {
-      // Lightbox / full-screen media viewer: keep the platform chrome
-      // interactive; the control bar is reachable via the clipped bottom strip.
+    if (mainPlayer || isInCarousel(video)) {
+      // Media viewer & carousel thumbnails: the platform chrome stays interactive
+      // (it carries the drag gesture), so keep it and reach the control bar via
+      // the clipped bottom strip.
       video.dataset.tarKeepChrome = '1';
       TAR.enableNativeControls(video);
       TAR.hideSeekSliderNear(video);
       clipControlBarStrip(video);
       continue;
     }
-    if (isInCarousel(video)) {
-      // Multi-media carousel thumbnail: controls on, but the platform chrome
-      // stays visible/interactive so dragging keeps working; the control bar
-      // is reachable via the clipped bottom strip.
-      video.dataset.tarKeepChrome = '1';
-      TAR.enableNativeControls(video);
-      TAR.hideSeekSliderNear(video);
-      clipControlBarStrip(video);
-      continue;
-    }
-    // Single-video post: full hover-hide experience via the common watcher.
-    if (video.dataset.tarKeepChrome) delete video.dataset.tarKeepChrome;
+    // Single-video post: hover hides the whole chrome instead.
+    delete video.dataset.tarKeepChrome;
     TAR.enableNativeControls(video);
     TAR.hideSeekSliderNear(video);
   }
