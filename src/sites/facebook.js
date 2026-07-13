@@ -62,7 +62,7 @@ function installHover() {
             for (const el of video._tarFbChrome) el.classList.remove('tar-fb-show');
             video._tarFbChrome = null;
           }
-        }, 3000);
+        }, 2600);
       } else if (video._tarFbChrome) {
         for (const el of video._tarFbChrome) el.classList.remove('tar-fb-show');
         video._tarFbChrome = null;
