@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Threads Auto Reveal",
+  "name": "Threads Controls",
   "version": "2.2.2",
-  "description": "Auto-reveal hidden spoilers on Threads (text & media), and enable video controls.",
+  "description": "Native video controls for Threads, Instagram and Facebook, plus spoiler auto-reveal on Threads.",
   "icons": {
     "16": "icon.png",
     "48": "icon.png",
     "128": "icon.png"
   },
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "src/popup/popup.html",
     "default_icon": "icon.png"
   },
   "permissions": [
@@ -23,7 +23,38 @@
         "https://www.facebook.com/*"
       ],
       "js": [
-        "content.js"
+        "src/volume-guard.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.threads.com/*"
+      ],
+      "js": [
+        "src/common.js",
+        "src/sites/threads.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "src/common.js",
+        "src/sites/instagram.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.facebook.com/*"
+      ],
+      "js": [
+        "src/common.js",
+        "src/sites/facebook.js"
       ],
       "run_at": "document_idle"
     }
