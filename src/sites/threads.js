@@ -100,7 +100,10 @@ function isInCarousel(video) {
 // the rest of the overlay keeps working. Re-run when the video is re-laid-out.
 function clipControlBarStrip(video) {
   const rect = video.getBoundingClientRect();
-  const sig = Math.round(rect.width) + 'x' + Math.round(rect.height);
+  // Fold horizontal position into the sig: in the lightbox, switching to an
+  // adjacent media shifts the video sideways over a fresh overlay, so we must
+  // re-clip. Clipping is idempotent, so an occasional redundant re-run is safe.
+  const sig = Math.round(rect.width) + 'x' + Math.round(rect.height) + '@' + Math.round(rect.left / 40);
   if (video.dataset.clipSig === sig) return;
   const cx = rect.left + rect.width / 2;
   const barY = rect.bottom - 15;
@@ -124,7 +127,15 @@ function videoPass() {
     const rect = video.getBoundingClientRect();
     if (rect.width === 0) continue;
     const mainPlayer = rect.height > window.innerHeight * 0.5;
-    if (mainPlayer) {
+    const centered = Math.abs((rect.left + rect.width / 2) - window.innerWidth / 2) < window.innerWidth * 0.25;
+    if (mainPlayer && !centered) {
+      // Off-center preloaded neighbor in the media viewer: the lightbox
+      // pre-mounts the adjacent media to the left/right of center. Leave it
+      // platform-native so its paused control bar does not linger on screen.
+      TAR.disableNativeControls(video);
+      continue;
+    }
+    if (mainPlayer && centered) {
       // Lightbox / full-screen media viewer: keep the platform chrome
       // interactive; the control bar is reachable via the clipped bottom strip.
       video.dataset.tarKeepChrome = '1';
