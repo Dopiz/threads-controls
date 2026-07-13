@@ -30,13 +30,17 @@ function injectStyle() {
 
 // Install once: while the pointer is over a native-controlled FB video, reveal
 // its (shrunken) chrome group so caption + native controls show together; hide
-// again on leave. React may swap the nodes, so re-find on every enter; operating
-// on a detached node is harmless.
+// again on leave. The native controls also auto-hide after ~3s of pointer
+// idle while playing (browser-internal, unreadable), so mirror that with our
+// own idle timer — the next mousemove brings the chrome straight back. React
+// may swap the nodes, so re-find on every enter; operating on a detached node
+// is harmless.
 let hoverInstalled = false;
 function installHover() {
   if (hoverInstalled) return;
   hoverInstalled = true;
   let lastMove = 0;
+  let idleTimer = null;
   document.addEventListener('mousemove', (e) => {
     const now = Date.now();
     if (now - lastMove < 80) return;
@@ -50,6 +54,15 @@ function installHover() {
         const chrome = TAR.findPlayerChrome(video);
         for (const el of chrome) el.classList.add('tar-fb-show');
         video._tarFbChrome = chrome;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          // Native controls fade out when the pointer idles on a playing
+          // video (they stay up while paused) — hide the chrome in step.
+          if (!video.paused && video._tarFbChrome) {
+            for (const el of video._tarFbChrome) el.classList.remove('tar-fb-show');
+            video._tarFbChrome = null;
+          }
+        }, 3000);
       } else if (video._tarFbChrome) {
         for (const el of video._tarFbChrome) el.classList.remove('tar-fb-show');
         video._tarFbChrome = null;
