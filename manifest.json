@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Threads Controls",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "description": "Native video controls for Threads, Instagram and Facebook, plus spoiler auto-reveal on Threads.",
   "icons": {
     "16": "icon.png",
