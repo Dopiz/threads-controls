@@ -124,7 +124,16 @@ function videoPass() {
     const rect = video.getBoundingClientRect();
     if (rect.width === 0) continue;
     const mainPlayer = rect.height > window.innerHeight * 0.5;
-    if (!mainPlayer && isInCarousel(video)) {
+    if (mainPlayer) {
+      // Lightbox / full-screen media viewer: keep the platform chrome
+      // interactive; the control bar is reachable via the clipped bottom strip.
+      video.dataset.tarKeepChrome = '1';
+      TAR.enableNativeControls(video);
+      TAR.hideSeekSliderNear(video);
+      clipControlBarStrip(video);
+      continue;
+    }
+    if (isInCarousel(video)) {
       // Multi-media carousel thumbnail: controls on, but the platform chrome
       // stays visible/interactive so dragging keeps working; the control bar
       // is reachable via the clipped bottom strip.
@@ -134,7 +143,7 @@ function videoPass() {
       clipControlBarStrip(video);
       continue;
     }
-    // Main player (single video, media viewer): full hover-hide experience.
+    // Single-video post: full hover-hide experience via the common watcher.
     if (video.dataset.tarKeepChrome) delete video.dataset.tarKeepChrome;
     TAR.enableNativeControls(video);
     TAR.hideSeekSliderNear(video);
