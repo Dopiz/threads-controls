@@ -1,6 +1,6 @@
-# Threads Auto Reveal
+# Threads Controls
 
-Auto-reveal hidden spoilers on Threads (text & media), and enable video controls.
+Native video controls for Threads, Instagram and Facebook, plus spoiler auto-reveal on Threads.
 
 ## Install
 
@@ -8,10 +8,10 @@ Auto-reveal hidden spoilers on Threads (text & media), and enable video controls
 
 ## Features
 
+- Enable native browser video controls (playback, seek, volume, fullscreen) on Threads, Instagram and Facebook — toggle each site independently
+- Set a default volume for all videos, kept stable against the platforms' forced volume resets
 - Automatically reveals hidden spoiler text, images, and videos on Threads
 - Highlight revealed spoiler text with a background color to distinguish originally hidden content
-- Enable native browser video controls for playback, volume, and progress
-- Set a default volume for all videos
 - Works instantly after installation — no configuration needed
 
 ## Settings
@@ -26,19 +26,19 @@ Click the extension icon to open the popup:
 | **Highlight Color** | Background color for revealed spoiler text (None / Blue / Yellow / Green / Purple) |
 | **Media** | Auto-reveal hidden spoiler images & videos |
 
-### Video
+### Video Controls
 
 | Option | Description |
 |--------|-------------|
-| **Show Controls** | Enable native browser video controls |
+| **Site icons** | Click the Threads / Instagram / Facebook icons to enable or disable native video controls per site (grayed out = disabled). Default: only Threads enabled |
 | **Default Volume** | Set the default volume level (0–100%) for all videos |
 
-All options are enabled by default. Videos default to muted — when unmuted, they use the configured volume.
+Videos default to muted — when unmuted, they play at the configured volume.
 
 ## Privacy
 
 - No data is collected or sent to any server
-- Only runs on `threads.com`
+- Only runs on `threads.com`, `instagram.com` and `facebook.com`
 - Uses `chrome.storage.sync` solely for storing your preferences
 
 ## License
