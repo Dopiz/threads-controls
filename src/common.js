@@ -111,6 +111,9 @@ TAR.installHoverChromeHide = function () {
     lastMove = now;
     for (const video of document.querySelectorAll('video')) {
       if (video.controls !== true) continue;
+      // Opt-out (e.g. Threads carousel thumbnails): the chrome carries the
+      // platform's drag gesture, so it must stay visible and interactive.
+      if (video.dataset.tarKeepChrome === '1') continue;
       const rect = video.getBoundingClientRect();
       const inside = e.clientX >= rect.left && e.clientX <= rect.right &&
         e.clientY >= rect.top && e.clientY <= rect.bottom;
@@ -161,6 +164,11 @@ TAR.enableNativeControls = function (video) {
       if (!prevMuted && Date.now() - Number(video.dataset.seekAt || 0) < 1000) {
         video.dataset.unmuteAt = String(Date.now());
         applySound(() => { video.muted = false; video.volume = desired; });
+      } else if (offDesired) {
+        // The platform keeps forcing volume=1.0 while muted; pin it to the
+        // desired level NOW so the instant of unmuting never plays at 100%
+        // (the volumechange event fires async, after audio already output).
+        applySound(() => { video.volume = desired; });
       }
     } else if (prevMuted) {
       // Just unmuted (user click, or platform after a seek): the platform tends

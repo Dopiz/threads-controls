@@ -93,6 +93,27 @@ function isInCarousel(video) {
   return false;
 }
 
+// Carousel thumbnails keep the platform overlay visible and interactive (it
+// carries the drag gesture), so the native control bar underneath would be
+// unreachable. Clip only the strip of each covering overlay that sits over the
+// control bar — hover/click near the bottom edge reaches the controls while
+// the rest of the overlay keeps working. Re-run when the video is re-laid-out.
+function clipControlBarStrip(video) {
+  const rect = video.getBoundingClientRect();
+  const sig = Math.round(rect.width) + 'x' + Math.round(rect.height);
+  if (video.dataset.clipSig === sig) return;
+  const cx = rect.left + rect.width / 2;
+  const barY = rect.bottom - 15;
+  if (cx < 0 || cx > window.innerWidth || barY < 0 || barY > window.innerHeight) return;
+  const stripTop = rect.bottom - 40;
+  for (const el of document.elementsFromPoint(cx, barY)) {
+    if (el === video || el.tagName === 'VIDEO' || el.contains(video)) break;
+    const clipBottom = el.getBoundingClientRect().bottom - stripTop;
+    if (clipBottom > 0) el.style.clipPath = 'inset(0 0 ' + Math.ceil(clipBottom) + 'px 0)';
+  }
+  video.dataset.clipSig = sig;
+}
+
 function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
   TAR.hidePlatformMuteButtons();
@@ -101,11 +122,17 @@ function videoPass() {
     if (rect.width === 0) continue;
     const mainPlayer = rect.height > window.innerHeight * 0.5;
     if (!mainPlayer && isInCarousel(video)) {
-      // Multi-media carousel thumbnail: keep the platform's native behaviour
-      // (draggable, no black control bar).
-      TAR.disableNativeControls(video);
+      // Multi-media carousel thumbnail: controls on, but the platform chrome
+      // stays visible/interactive so dragging keeps working; the control bar
+      // is reachable via the clipped bottom strip.
+      video.dataset.tarKeepChrome = '1';
+      TAR.enableNativeControls(video);
+      TAR.hideSeekSliderNear(video);
+      clipControlBarStrip(video);
       continue;
     }
+    // Main player (single video, media viewer): full hover-hide experience.
+    if (video.dataset.tarKeepChrome) delete video.dataset.tarKeepChrome;
     TAR.enableNativeControls(video);
     TAR.hideSeekSliderNear(video);
   }
