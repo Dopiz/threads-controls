@@ -1,10 +1,22 @@
-const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '', videoControls: true, defaultVolume: 10 };
+const DEFAULTS = {
+  revealText: true,
+  revealMedia: true,
+  textHighlight: '',
+  videoControlsThreads: true,
+  videoControlsInstagram: false,
+  videoControlsFacebook: false,
+  defaultVolume: 10
+};
 
 const toggleText = document.getElementById('toggle-text');
 const toggleMedia = document.getElementById('toggle-media');
 const swatch = document.getElementById('text-color-swatch');
 const dropdown = document.getElementById('text-color-dropdown');
-const toggleVideo = document.getElementById('toggle-video');
+const SITE_TOGGLES = [
+  { button: document.getElementById('site-threads'), key: 'videoControlsThreads' },
+  { button: document.getElementById('site-instagram'), key: 'videoControlsInstagram' },
+  { button: document.getElementById('site-facebook'), key: 'videoControlsFacebook' }
+];
 const sliderVolume = document.getElementById('slider-volume');
 const volumeValue = document.getElementById('volume-value');
 
@@ -14,7 +26,9 @@ chrome.storage.sync.get(DEFAULTS, (settings) => {
   toggleText.checked = settings.revealText;
   toggleMedia.checked = settings.revealMedia;
   updateSwatch(settings.textHighlight);
-  toggleVideo.checked = settings.videoControls;
+  for (const { button, key } of SITE_TOGGLES) {
+    button.classList.toggle('off', !settings[key]);
+  }
   sliderVolume.value = settings.defaultVolume;
   volumeValue.textContent = settings.defaultVolume + '%';
 });
@@ -58,9 +72,13 @@ function updateSwatch(color) {
   }
 }
 
-toggleVideo.addEventListener('change', () => {
-  chrome.storage.sync.set({ videoControls: toggleVideo.checked });
-});
+for (const { button, key } of SITE_TOGGLES) {
+  button.addEventListener('click', () => {
+    const enabled = button.classList.contains('off');
+    button.classList.toggle('off', !enabled);
+    chrome.storage.sync.set({ [key]: enabled });
+  });
+}
 
 sliderVolume.addEventListener('input', () => {
   volumeValue.textContent = sliderVolume.value + '%';

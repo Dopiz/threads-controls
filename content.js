@@ -1,4 +1,19 @@
-const DEFAULTS = { revealText: true, revealMedia: true, textHighlight: '', videoControls: true, defaultVolume: 10 };
+const DEFAULTS = {
+  revealText: true,
+  revealMedia: true,
+  textHighlight: '',
+  videoControlsThreads: true,
+  videoControlsInstagram: false,
+  videoControlsFacebook: false,
+  defaultVolume: 10
+};
+
+function videoControlsEnabled() {
+  const host = location.hostname;
+  if (host.includes('instagram.com')) return settings.videoControlsInstagram;
+  if (host.includes('facebook.com')) return settings.videoControlsFacebook;
+  return settings.videoControlsThreads;
+}
 let settings = { ...DEFAULTS };
 let revealTimer = null;
 
@@ -19,7 +34,7 @@ function revealSpoilers() {
   const buttons = document.querySelectorAll('div[role="button"]');
   if (settings.revealText)  revealSpoilerText(buttons);
   if (settings.revealMedia) revealSpoilerMedia(buttons);
-  if (settings.videoControls) enableVideoControls();
+  if (videoControlsEnabled()) enableVideoControls();
 }
 
 function revealSpoilerText(buttons) {
@@ -110,6 +125,68 @@ function hidePlatformMuteButtons() {
   }
 }
 
+// Height of the native control bar strip at the bottom of a video.
+const CONTROL_BAR_HEIGHT = 40;
+
+// Reels (FB/IG) draw an overlay chrome (caption/owner info, top bar) over the
+// video. It is purely visual (pointer-events: none), but it sits right on top
+// of the native control bar. Hide it while the pointer is over the video —
+// i.e. while the native controls are showing — and restore it on leave.
+// Preferred match: the whole div[aria-label="Video player"] group covering the
+// video. Fallback (other surfaces/locales): a bottom-anchored info block.
+function isPlayerChrome(el, videoRect) {
+  if (el.getAttribute('aria-label') !== 'Video player') return false;
+  const rect = el.getBoundingClientRect();
+  const overlapW = Math.min(rect.right, videoRect.right) - Math.max(rect.left, videoRect.left);
+  const overlapH = Math.min(rect.bottom, videoRect.bottom) - Math.max(rect.top, videoRect.top);
+  return overlapW > 0 && overlapH > 0 &&
+    overlapW * overlapH >= videoRect.width * videoRect.height * 0.5;
+}
+
+function findInfoOverlays(video) {
+  const videoRect = video.getBoundingClientRect();
+  const found = [];
+  let ancestor = video.parentElement;
+  for (let i = 0; i < 4 && ancestor; i++, ancestor = ancestor.parentElement) {
+    const divs = ancestor.querySelectorAll('div');
+    if (divs.length > 400) break;
+    for (const el of divs) {
+      if (el.contains(video)) continue;
+      if (found.some(f => f.contains(el) || el.contains(f))) continue;
+      if (isPlayerChrome(el, videoRect)) {
+        found.push(el);
+        continue;
+      }
+      const style = getComputedStyle(el);
+      if (style.position !== 'absolute' || style.pointerEvents !== 'none') continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < videoRect.width * 0.5) continue;
+      // bottom-anchored block only — never a full-cover wrapper
+      if (rect.top <= videoRect.top + videoRect.height * 0.5) continue;
+      if (rect.bottom <= videoRect.bottom - CONTROL_BAR_HEIGHT || rect.top >= videoRect.bottom) continue;
+      if (rect.left >= videoRect.right || rect.right <= videoRect.left) continue;
+      if (!(el.innerText || '').trim()) continue;
+      found.push(el);
+    }
+    if (found.length) break;
+  }
+  return found;
+}
+
+function setupInfoOverlayHover(video) {
+  let hidden = null;
+  video.addEventListener('mouseenter', () => {
+    if (hidden) return;
+    hidden = findInfoOverlays(video);
+    for (const el of hidden) el.style.visibility = 'hidden';
+  });
+  video.addEventListener('mouseleave', () => {
+    if (!hidden) return;
+    for (const el of hidden) el.style.visibility = '';
+    hidden = null;
+  });
+}
+
 function enableVideoControls() {
   hidePlatformMuteButtons();
   for (const video of document.querySelectorAll('video')) {
@@ -162,24 +239,27 @@ function enableVideoControls() {
         }
         video.dataset.prevMuted = video.muted ? '1' : '0';
       });
+
+      setupInfoOverlayHover(video);
     }
 
     if (video.dataset.overlayCleared === 'true') continue;
     const videoRect = video.getBoundingClientRect();
     if (videoRect.width === 0) continue;
     const cx = videoRect.left + videoRect.width / 2;
-    const midY = videoRect.top + videoRect.height / 2;
-    if (cx < 0 || cx > window.innerWidth || midY < 0 || midY > window.innerHeight) continue;
+    const barY = videoRect.bottom - 15;
+    if (cx < 0 || cx > window.innerWidth || barY < 0 || barY > window.innerHeight) continue;
 
-    for (const py of [midY, videoRect.bottom - 15]) {
-      let el = document.elementFromPoint(cx, py);
-      let attempts = 0;
-      while (el && el !== video && el.tagName !== 'VIDEO' && attempts < 10) {
-        if (el.contains(video)) break;
-        el.style.pointerEvents = 'none';
-        el = document.elementFromPoint(cx, py);
-        attempts++;
-      }
+    // Make the native control bar clickable. The overlays covering the video
+    // also carry the platform's own pointer handlers (e.g. the drag gesture on
+    // multi-media carousels), so pointer-events:none on them would kill those.
+    // Instead, clip away only the part of each overlay that covers the
+    // control-bar strip, leaving the rest interactive.
+    const stripTop = videoRect.bottom - CONTROL_BAR_HEIGHT;
+    for (const el of document.elementsFromPoint(cx, barY)) {
+      if (el === video || el.tagName === 'VIDEO' || el.contains(video)) break;
+      const clipBottom = el.getBoundingClientRect().bottom - stripTop;
+      if (clipBottom > 0) el.style.clipPath = 'inset(0 0 ' + Math.ceil(clipBottom) + 'px 0)';
     }
 
     // Hide the platform's own seek/progress slider — the native control bar
