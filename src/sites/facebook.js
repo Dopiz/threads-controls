@@ -4,9 +4,11 @@
 // pointer-events:none so hovering anywhere on the video keeps the controls up
 // (interactive children get pointer-events re-enabled below). The ::after tail
 // fades the caption's black gradient out over the freed strip — without it a
-// hard cut line shows. FB's own control row inside the chrome is hidden
-// outright: it fades itself out while playing but stays clickable, and comes
-// back when paused, stacking a second control bar on top of the native one.
+// hard cut line shows — only on larger players: on small ones (the feed's
+// Reels cards) the tail reads as a dark box under the bar, so it is dropped.
+// FB's own control row inside the chrome is hidden outright: it fades itself
+// out while playing but stays clickable, and comes back when paused, stacking
+// a second control bar on top of the native one.
 const FB_STYLE = [
   '.tar-fb-bar { display: none !important; }',
   '.tar-fb-chrome { height: calc(100% - 60px) !important; visibility: hidden; opacity: 0; transition: opacity 0.3s ease, visibility 0.3s; pointer-events: none !important; }',
@@ -14,8 +16,12 @@ const FB_STYLE = [
   '.tar-fb-chrome.tar-fb-show a[role="link"], .tar-fb-chrome.tar-fb-show div[role="button"] { pointer-events: auto; }',
   '.tar-fb-chrome::after { content: \'\'; position: absolute; left: 0; right: 0;',
   '  bottom: -60px; height: 60px; pointer-events: none;',
-  '  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0)); }'
+  '  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0)); }',
+  '.tar-fb-chrome.tar-fb-compact::after { content: none; }'
 ].join('\n');
+
+// Below this video width the player counts as small (no gradient tail).
+const FB_COMPACT_WIDTH = 400;
 
 // The native controls auto-hide after ~3s of pointer idle while playing
 // (browser-internal, unreadable), so an own idle timer mirrors that. React may
@@ -66,12 +72,14 @@ function videoPass() {
   TAR.watchHover(fbHoverChrome);
   TAR.hidePlatformMuteButtons();
   for (const video of document.querySelectorAll('video')) {
-    if (video.getBoundingClientRect().width === 0) continue;
+    const width = video.getBoundingClientRect().width;
+    if (width === 0) continue;
     TAR.enableNativeControls(video);
     TAR.hideSeekSliderNear(video);
     // Re-run each pass to catch React-replaced nodes; classList.add is idempotent.
     for (const chrome of TAR.findPlayerChrome(video)) {
       chrome.classList.add('tar-fb-chrome');
+      chrome.classList.toggle('tar-fb-compact', width < FB_COMPACT_WIDTH);
       hideFbControlRow(chrome);
     }
   }
@@ -81,7 +89,7 @@ function teardown() {
   clearTimeout(idleTimer);
   for (const video of document.querySelectorAll('video')) video._tarFbChrome = null;
   for (const el of document.querySelectorAll('.tar-fb-chrome, .tar-fb-bar')) {
-    el.classList.remove('tar-fb-chrome', 'tar-fb-show', 'tar-fb-bar');
+    el.classList.remove('tar-fb-chrome', 'tar-fb-show', 'tar-fb-compact', 'tar-fb-bar');
   }
 }
 

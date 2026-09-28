@@ -143,10 +143,13 @@ function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
   TAR.hidePlatformMuteButtons();
   TAR.watchHover(hoverHideChrome);
+  // The media viewer (lightbox) lives at .../post/<id>/media; elsewhere a tall
+  // video is just a big post video (e.g. the main one on a post page).
+  const inViewer = /\/media\/?$/.test(location.pathname);
   for (const video of document.querySelectorAll('video')) {
     const rect = video.getBoundingClientRect();
     if (rect.width === 0) continue;
-    const mainPlayer = rect.height > window.innerHeight * 0.5;
+    const mainPlayer = inViewer && rect.height > window.innerHeight * 0.5;
     const centered = Math.abs((rect.left + rect.width / 2) - window.innerWidth / 2) < window.innerWidth * 0.25;
     if (mainPlayer && !centered) {
       // Off-center preloaded neighbor in the media viewer: the lightbox

@@ -12,19 +12,30 @@ const DEFAULTS = {
 // TAR.register() with its storage key and passes; common then loads settings
 // (async) and drives the pass runs, so register always precedes the first run.
 // A site may also pass `teardown`, run (after the shared teardown) when its
-// video-controls toggle is switched off live, to undo its own DOM changes.
+// video-controls toggle is switched off live, to undo its own DOM changes, and
+// `carrySound: true` to carry the user's sound state from clip to clip (below).
 const TAR = {
   settings: { ...DEFAULTS },
+  // Page-wide sound state for carrySound sites, else null: whether the user
+  // last muted or unmuted, and the level they last set (null = default).
+  sound: null,
   _settingKey: null,
   _passes: [],
   _teardown: null,
+  _carrySound: false,
   _videoActive: false,
   _timer: null,
 
-  register({ settingKey, passes, teardown }) {
+  register({ settingKey, passes, teardown, carrySound }) {
     this._settingKey = settingKey;
     this._passes = passes;
     this._teardown = teardown || null;
+    this._carrySound = !!carrySound;
+    this.resetSound();
+  },
+
+  resetSound() {
+    this.sound = this._carrySound ? { muted: true, volume: null } : null;
   },
 
   videoControlsEnabled() {
@@ -34,8 +45,12 @@ const TAR = {
   runPasses() {
     if (this.videoControlsEnabled()) {
       this._videoActive = true;
+      // Published for media-guard.js (MAIN world): the level to pin videos the
+      // debounced pass has not picked up yet.
+      document.documentElement.dataset.tarDefaultVolume = String(this.settings.defaultVolume / 100);
     } else if (this._videoActive) {
       this._videoActive = false;
+      this.resetSound();
       try { TAR.teardownVideoControls(); } catch (e) {}
       try { if (this._teardown) this._teardown(); } catch (e) {}
     }
@@ -69,6 +84,7 @@ chrome.storage.onChanged.addListener((changes) => {
   // only to ones that appear later.
   if ('defaultVolume' in changes) {
     const volume = TAR.settings.defaultVolume / 100;
+    if (TAR.sound) TAR.sound.volume = null;
     for (const video of document.querySelectorAll('video')) {
       if (video.dataset.controlsEnabled !== 'true') continue;
       video.dataset.desiredVolume = String(volume);
@@ -172,6 +188,43 @@ const onFullscreenChange = () => {
 document.addEventListener('fullscreenchange', onFullscreenChange);
 document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
+// Where the latest `muted` flip came from. media-guard.js stamps every page-JS
+// (platform) write and applySound stamps the extension's own; a flip with
+// neither stamp came from the browser's native control bar — the user.
+TAR.mutedChangeOrigin = function (video) {
+  const now = Date.now();
+  if (now - Number(video.dataset.tarSelfAt || 0) < 150) return 'self';
+  if (now - Number(video.dataset.tarJsMuteAt || 0) < 150) return 'platform';
+  return 'user';
+};
+
+// Fraction of the video's area inside the viewport.
+TAR.visibleRatio = function (video) {
+  const r = video.getBoundingClientRect();
+  const w = Math.min(r.right, window.innerWidth) - Math.max(r.left, 0);
+  const h = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+  return w > 0 && h > 0 ? (w * h) / (r.width * r.height) : 0;
+};
+
+// Extension-side sound writes, stamped so the change is not read as the user's.
+TAR.applySound = function (video, fn) {
+  video.dataset.tarSelfAt = String(Date.now());
+  fn();
+};
+
+// carrySound sites: put the page-wide sound state on a clip that is (about to
+// be) on screen — muted or not as the user last chose, at their last level.
+TAR.applyCarriedSound = function (video) {
+  const volume = TAR.sound.volume ?? TAR.settings.defaultVolume / 100;
+  video.dataset.desiredVolume = String(volume);
+  TAR.applySound(video, () => {
+    video.volume = volume;
+    video.muted = TAR.sound.muted;
+  });
+  video.dataset.prevMuted = video.muted ? '1' : '0';
+  if (!video.muted) video.dataset.unmuteAt = String(Date.now());
+};
+
 TAR.enableNativeControls = function (video) {
   video.controls = true;
   if (video.dataset.controlsEnabled === 'true') return;
@@ -180,6 +233,9 @@ TAR.enableNativeControls = function (video) {
   video.volume = TAR.settings.defaultVolume / 100;
   video.dataset.desiredVolume = String(TAR.settings.defaultVolume / 100);
   video.dataset.prevMuted = video.muted ? '1' : '0';
+  // A carried "unmuted" only goes on a clip that is playing on screen; a
+  // preloaded off-screen one gets it from the play listener when it starts.
+  if (TAR.sound && !video.paused && TAR.visibleRatio(video) >= 0.5) TAR.applyCarriedSound(video);
 
   // Listeners go on once per element: a live toggle-off (teardown) clears the
   // dataset state above, and a later re-enable must not stack duplicates.
@@ -193,11 +249,11 @@ TAR.enableNativeControls = function (video) {
   // resume). "desiredVolume" tracks the user's chosen level (starts at the
   // default and only updates on a genuine slider drag). Per-video, transient — a
   // brand new clip still starts muted at the default, so nothing is remembered
-  // across clips.
-  const applySound = (fn) => { video.dataset.applyingSound = '1'; fn(); video.dataset.applyingSound = ''; };
+  // across clips — unless the site carries sound (TAR.sound), in which case each
+  // clip picks up the page-wide state when it starts playing on screen.
   const restoreSound = () => {
     video.dataset.unmuteAt = String(Date.now());
-    applySound(() => { video.muted = false; video.volume = Number(video.dataset.desiredVolume); });
+    TAR.applySound(video, () => { video.muted = false; video.volume = Number(video.dataset.desiredVolume); });
   };
 
   // IG/FB keep their own mute state, which stays "muted" because their mute
@@ -211,16 +267,31 @@ TAR.enableNativeControls = function (video) {
   video.addEventListener('play', () => {
     if (video.dataset.controlsEnabled !== 'true') return;
     video.dataset.playAt = String(Date.now());
-    if (video.muted && hadSound()) restoreSound();
+    if (TAR.sound) {
+      if (video.muted !== TAR.sound.muted && TAR.visibleRatio(video) >= 0.5) TAR.applyCarriedSound(video);
+    } else if (video.muted && hadSound()) {
+      restoreSound();
+    }
   });
 
   video.addEventListener('volumechange', () => {
     if (video.dataset.controlsEnabled !== 'true') return;
-    if (video.dataset.applyingSound === '1') return;
     const desired = Number(video.dataset.desiredVolume);
     const prevMuted = video.dataset.prevMuted === '1';
     const offDesired = Math.abs(video.volume - desired) > 0.005;
     const now = Date.now();
+
+    if (TAR.sound && video.muted !== prevMuted) {
+      const origin = TAR.mutedChangeOrigin(video);
+      if (origin === 'user') {
+        // The user's own mute/unmute sets the state the next clips carry.
+        TAR.sound.muted = video.muted;
+      } else if (origin === 'platform' && !video.paused && TAR.visibleRatio(video) >= 0.5 &&
+          video.muted !== TAR.sound.muted) {
+        TAR.applyCarriedSound(video);
+        return;
+      }
+    }
 
     if (video.muted) {
       // A native-control seek or a resume makes the platform re-mute; undo it
@@ -232,19 +303,21 @@ TAR.enableNativeControls = function (video) {
         // The platform keeps forcing volume=1.0 while muted; pin it to the
         // desired level NOW so the instant of unmuting never plays at 100%
         // (the volumechange event fires async, after audio already output).
-        applySound(() => { video.volume = desired; });
+        TAR.applySound(video, () => { video.volume = desired; });
       }
     } else if (prevMuted) {
       // Just unmuted (user click, or platform after a seek): the platform tends
       // to jump volume to 100%, so pin it back to the user's desired level.
       video.dataset.unmuteAt = String(now);
-      if (offDesired) applySound(() => { video.volume = desired; });
+      if (offDesired) TAR.applySound(video, () => { video.volume = desired; });
     } else if (now - Number(video.dataset.unmuteAt || 0) < 600) {
       // Platform's delayed volume bump right after an unmute → pin to desired.
-      if (offDesired) applySound(() => { video.volume = desired; });
+      if (offDesired) TAR.applySound(video, () => { video.volume = desired; });
     } else if (offDesired) {
-      // Genuine user slider drag → remember it as the new desired volume.
+      // Genuine user slider drag → remember it as the new desired volume (and,
+      // on carrySound sites, the level the next clips start at).
       video.dataset.desiredVolume = String(video.volume);
+      if (TAR.sound) TAR.sound.volume = video.volume;
     }
     video.dataset.prevMuted = video.muted ? '1' : '0';
   });
@@ -255,13 +328,14 @@ TAR.disableNativeControls = function (video) {
 };
 
 // The site's toggle was switched off live: hand every video and the shared
-// DOM tweaks back to the platform. Dropping desiredVolume also releases the
-// MAIN-world volume guard; the per-video listeners stay but go inert.
+// DOM tweaks back to the platform. Dropping desiredVolume/tarDefaultVolume also
+// releases the MAIN-world guards; the per-video listeners stay but go inert.
 TAR.teardownVideoControls = function () {
+  delete document.documentElement.dataset.tarDefaultVolume;
   for (const video of document.querySelectorAll('video')) {
     if (video.dataset.controlsEnabled !== 'true') continue;
     video.controls = false;
-    for (const key of ['controlsEnabled', 'desiredVolume', 'prevMuted', 'seekAt', 'playAt', 'unmuteAt']) {
+    for (const key of ['controlsEnabled', 'desiredVolume', 'prevMuted', 'seekAt', 'playAt', 'unmuteAt', 'tarSelfAt', 'tarJsMuteAt']) {
       delete video.dataset[key];
     }
   }

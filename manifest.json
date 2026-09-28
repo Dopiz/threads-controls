@@ -23,7 +23,7 @@
         "https://www.facebook.com/*"
       ],
       "js": [
-        "src/volume-guard.js"
+        "src/media-guard.js"
       ],
       "world": "MAIN",
       "run_at": "document_start"

@@ -1,6 +1,8 @@
 // IG's Video player overlay chrome is hidden outright — the native controls
 // replace it. Unlike other sites we don't do hover-to-reveal here: hide the
 // chrome groups directly via an injected style + a re-tagged class each pass.
+// Sound carries from clip to clip (carrySound): scrolling Reels/the feed keeps
+// the user's last mute/unmute and level, like IG's own player does.
 
 function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
@@ -23,5 +25,6 @@ function teardown() {
 TAR.register({
   settingKey: 'videoControlsInstagram',
   passes: [videoPass],
-  teardown
+  teardown,
+  carrySound: true
 });
