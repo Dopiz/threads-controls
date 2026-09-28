@@ -11,15 +11,20 @@ const DEFAULTS = {
 // Shared core for all site scripts. A site file synchronously calls
 // TAR.register() with its storage key and passes; common then loads settings
 // (async) and drives the pass runs, so register always precedes the first run.
+// A site may also pass `teardown`, run (after the shared teardown) when its
+// video-controls toggle is switched off live, to undo its own DOM changes.
 const TAR = {
   settings: { ...DEFAULTS },
   _settingKey: null,
   _passes: [],
+  _teardown: null,
+  _videoActive: false,
   _timer: null,
 
-  register({ settingKey, passes }) {
+  register({ settingKey, passes, teardown }) {
     this._settingKey = settingKey;
     this._passes = passes;
+    this._teardown = teardown || null;
   },
 
   videoControlsEnabled() {
@@ -27,6 +32,13 @@ const TAR = {
   },
 
   runPasses() {
+    if (this.videoControlsEnabled()) {
+      this._videoActive = true;
+    } else if (this._videoActive) {
+      this._videoActive = false;
+      try { TAR.teardownVideoControls(); } catch (e) {}
+      try { if (this._teardown) this._teardown(); } catch (e) {}
+    }
     for (const pass of this._passes) {
       try { pass(); } catch (e) {}
     }
@@ -53,6 +65,16 @@ chrome.storage.onChanged.addListener((changes) => {
   for (const [key, { newValue }] of Object.entries(changes)) {
     if (key in DEFAULTS) TAR.settings[key] = newValue;
   }
+  // A new default volume applies to the videos already on the page too, not
+  // only to ones that appear later.
+  if ('defaultVolume' in changes) {
+    const volume = TAR.settings.defaultVolume / 100;
+    for (const video of document.querySelectorAll('video')) {
+      if (video.dataset.controlsEnabled !== 'true') continue;
+      video.dataset.desiredVolume = String(volume);
+      video.volume = volume;
+    }
+  }
   TAR.runPasses();
 });
 
@@ -66,11 +88,11 @@ TAR.ensureStyle = function (id, css) {
 };
 
 // Hide the platform's own mute toggle — native controls already provide one.
-// The icon differs by surface: logged-out uses svg[aria-label], logged-in puts
-// the label in an inner <title>; both sit inside a role="button". We hide that
-// button via an injected !important class so a platform hover/re-render that sets
-// an inline display can't bring it back, and re-tag every pass in case React
-// swaps the node.
+// The label differs by surface: logged-out uses svg[aria-label], logged-in puts
+// it in an inner <title>, and FB may label the role="button" itself (bare svg).
+// We hide that button via an injected !important class so a platform
+// hover/re-render that sets an inline display can't bring it back, and re-tag
+// every pass in case React swaps the node.
 TAR.hidePlatformMuteButtons = function () {
   TAR.ensureStyle('tar-mute-style', '.tar-hide-mute{display:none !important;}');
   // The platform mute button lives inside the Video player group on all three
@@ -82,9 +104,10 @@ TAR.hidePlatformMuteButtons = function () {
     : document.querySelectorAll('svg');
   for (const svg of svgs) {
     const title = svg.querySelector('title');
-    const label = svg.getAttribute('aria-label') || (title && title.textContent) || '';
-    if (!/靜音|mute/i.test(label)) continue;
     const button = svg.closest('div[role="button"]');
+    const label = svg.getAttribute('aria-label') || (title && title.textContent) ||
+      (button && button.getAttribute('aria-label')) || '';
+    if (!/靜音|mute/i.test(label)) continue;
     if (button && !button.classList.contains('tar-hide-mute')) button.classList.add('tar-hide-mute');
   }
 };
@@ -158,25 +181,53 @@ TAR.enableNativeControls = function (video) {
   video.dataset.desiredVolume = String(TAR.settings.defaultVolume / 100);
   video.dataset.prevMuted = video.muted ? '1' : '0';
 
+  // Listeners go on once per element: a live toggle-off (teardown) clears the
+  // dataset state above, and a later re-enable must not stack duplicates.
+  if (video._tarListeners) return;
+  video._tarListeners = true;
+
   video.addEventListener('seeking', () => { video.dataset.seekAt = String(Date.now()); });
 
   // Keep the sound behaving predictably against the platform, which likes to
-  // force muted=true / volume=100% (e.g. on unmute or after a native seek).
-  // "desiredVolume" tracks the user's chosen level (starts at the default and
-  // only updates on a genuine slider drag). Per-video, transient — a brand new
-  // clip still starts muted at the default, so nothing is remembered across clips.
+  // force muted=true / volume=100% (e.g. on unmute, after a native seek, or on
+  // resume). "desiredVolume" tracks the user's chosen level (starts at the
+  // default and only updates on a genuine slider drag). Per-video, transient — a
+  // brand new clip still starts muted at the default, so nothing is remembered
+  // across clips.
   const applySound = (fn) => { video.dataset.applyingSound = '1'; fn(); video.dataset.applyingSound = ''; };
+  const restoreSound = () => {
+    video.dataset.unmuteAt = String(Date.now());
+    applySound(() => { video.muted = false; video.volume = Number(video.dataset.desiredVolume); });
+  };
+
+  // IG/FB keep their own mute state, which stays "muted" because their mute
+  // button is hidden and the user unmuted through the native bar — so every
+  // play (resume after pause, scroll back into view) they force muted=true
+  // again. They mute before the play event reaches us, while prevMuted still
+  // records that the user had sound; undo it here. unmuteAt proves the clip was
+  // unmuted at some point — a fresh element can start muted=false and get muted
+  // by the platform right before its first (muted) autoplay.
+  const hadSound = () => video.dataset.prevMuted === '0' && !!video.dataset.unmuteAt;
+  video.addEventListener('play', () => {
+    if (video.dataset.controlsEnabled !== 'true') return;
+    video.dataset.playAt = String(Date.now());
+    if (video.muted && hadSound()) restoreSound();
+  });
+
   video.addEventListener('volumechange', () => {
+    if (video.dataset.controlsEnabled !== 'true') return;
     if (video.dataset.applyingSound === '1') return;
     const desired = Number(video.dataset.desiredVolume);
     const prevMuted = video.dataset.prevMuted === '1';
     const offDesired = Math.abs(video.volume - desired) > 0.005;
+    const now = Date.now();
 
     if (video.muted) {
-      // A native-control seek makes the platform re-mute; undo it to keep sound.
-      if (!prevMuted && Date.now() - Number(video.dataset.seekAt || 0) < 1000) {
-        video.dataset.unmuteAt = String(Date.now());
-        applySound(() => { video.muted = false; video.volume = desired; });
+      // A native-control seek or a resume makes the platform re-mute; undo it
+      // to keep sound.
+      if ((!prevMuted && now - Number(video.dataset.seekAt || 0) < 1000) ||
+          (hadSound() && now - Number(video.dataset.playAt || 0) < 500)) {
+        restoreSound();
       } else if (offDesired) {
         // The platform keeps forcing volume=1.0 while muted; pin it to the
         // desired level NOW so the instant of unmuting never plays at 100%
@@ -186,9 +237,9 @@ TAR.enableNativeControls = function (video) {
     } else if (prevMuted) {
       // Just unmuted (user click, or platform after a seek): the platform tends
       // to jump volume to 100%, so pin it back to the user's desired level.
-      video.dataset.unmuteAt = String(Date.now());
+      video.dataset.unmuteAt = String(now);
       if (offDesired) applySound(() => { video.volume = desired; });
-    } else if (Date.now() - Number(video.dataset.unmuteAt || 0) < 600) {
+    } else if (now - Number(video.dataset.unmuteAt || 0) < 600) {
       // Platform's delayed volume bump right after an unmute → pin to desired.
       if (offDesired) applySound(() => { video.volume = desired; });
     } else if (offDesired) {
@@ -201,6 +252,24 @@ TAR.enableNativeControls = function (video) {
 
 TAR.disableNativeControls = function (video) {
   if (video.controls === true) video.controls = false;
+};
+
+// The site's toggle was switched off live: hand every video and the shared
+// DOM tweaks back to the platform. Dropping desiredVolume also releases the
+// MAIN-world volume guard; the per-video listeners stay but go inert.
+TAR.teardownVideoControls = function () {
+  for (const video of document.querySelectorAll('video')) {
+    if (video.dataset.controlsEnabled !== 'true') continue;
+    video.controls = false;
+    for (const key of ['controlsEnabled', 'desiredVolume', 'prevMuted', 'seekAt', 'playAt', 'unmuteAt']) {
+      delete video.dataset[key];
+    }
+  }
+  for (const el of document.querySelectorAll('.tar-hide-mute')) el.classList.remove('tar-hide-mute');
+  for (const slider of document.querySelectorAll('div[role="slider"][data-seek-hidden="true"]')) {
+    slider.style.display = '';
+    delete slider.dataset.seekHidden;
+  }
 };
 
 // Hide the platform's own seek/progress slider — the native control bar already

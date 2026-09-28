@@ -16,7 +16,12 @@ function videoPass() {
   }
 }
 
+function teardown() {
+  for (const el of document.querySelectorAll('.tar-ig-chrome')) el.classList.remove('tar-ig-chrome');
+}
+
 TAR.register({
   settingKey: 'videoControlsInstagram',
-  passes: [videoPass]
+  passes: [videoPass],
+  teardown
 });

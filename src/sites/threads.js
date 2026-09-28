@@ -115,7 +115,10 @@ function clipControlBarStrip(video) {
   for (const el of document.elementsFromPoint(cx, barY)) {
     if (el === video || el.tagName === 'VIDEO' || el.contains(video)) break;
     const clipBottom = el.getBoundingClientRect().bottom - stripTop;
-    if (clipBottom > 0) el.style.clipPath = 'inset(0 0 ' + Math.ceil(clipBottom) + 'px 0)';
+    if (clipBottom > 0) {
+      el.style.clipPath = 'inset(0 0 ' + Math.ceil(clipBottom) + 'px 0)';
+      el.dataset.tarClipped = '1';
+    }
   }
   video.dataset.clipSig = sig;
 }
@@ -169,7 +172,23 @@ function videoPass() {
   }
 }
 
+function teardown() {
+  for (const el of document.querySelectorAll('[data-tar-clipped]')) {
+    el.style.clipPath = '';
+    delete el.dataset.tarClipped;
+  }
+  for (const video of document.querySelectorAll('video')) {
+    if (video._tarChrome) {
+      for (const el of video._tarChrome) el.style.visibility = '';
+      video._tarChrome = null;
+    }
+    delete video.dataset.tarKeepChrome;
+    delete video.dataset.clipSig;
+  }
+}
+
 TAR.register({
   settingKey: 'videoControlsThreads',
-  passes: [revealSpoilerText, revealSpoilerMedia, videoPass]
+  passes: [revealSpoilerText, revealSpoilerMedia, videoPass],
+  teardown
 });

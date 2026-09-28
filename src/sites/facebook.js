@@ -4,8 +4,11 @@
 // pointer-events:none so hovering anywhere on the video keeps the controls up
 // (interactive children get pointer-events re-enabled below). The ::after tail
 // fades the caption's black gradient out over the freed strip — without it a
-// hard cut line shows.
+// hard cut line shows. FB's own control row inside the chrome is hidden
+// outright: it fades itself out while playing but stays clickable, and comes
+// back when paused, stacking a second control bar on top of the native one.
 const FB_STYLE = [
+  '.tar-fb-bar { display: none !important; }',
   '.tar-fb-chrome { height: calc(100% - 60px) !important; visibility: hidden; opacity: 0; transition: opacity 0.3s ease, visibility 0.3s; pointer-events: none !important; }',
   '.tar-fb-chrome.tar-fb-show { visibility: visible; opacity: 1; transition: opacity 0.1s ease, visibility 0.1s; }',
   '.tar-fb-chrome.tar-fb-show a[role="link"], .tar-fb-chrome.tar-fb-show div[role="button"] { pointer-events: auto; }',
@@ -40,6 +43,23 @@ function fbHoverChrome(video, inside) {
   }
 }
 
+// FB's control row (play, time, settings, fullscreen, volume) is the nearest
+// ancestor of its seek slider that also holds several buttons. Labels are
+// localized, so anchor on the slider's untranslated "position" label; the
+// height cap keeps a mismatch from hiding the caption/owner block.
+function hideFbControlRow(chrome) {
+  for (const slider of chrome.querySelectorAll('div[role="slider"]')) {
+    if (!/position/i.test(slider.getAttribute('aria-label') || '')) continue;
+    let row = slider.parentElement;
+    while (row && row !== chrome && row.querySelectorAll('div[role="button"]').length < 2) {
+      row = row.parentElement;
+    }
+    if (row && row !== chrome && row.getBoundingClientRect().height <= 80) {
+      row.classList.add('tar-fb-bar');
+    }
+  }
+}
+
 function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
   TAR.ensureStyle('tar-fb-style', FB_STYLE);
@@ -52,11 +72,21 @@ function videoPass() {
     // Re-run each pass to catch React-replaced nodes; classList.add is idempotent.
     for (const chrome of TAR.findPlayerChrome(video)) {
       chrome.classList.add('tar-fb-chrome');
+      hideFbControlRow(chrome);
     }
+  }
+}
+
+function teardown() {
+  clearTimeout(idleTimer);
+  for (const video of document.querySelectorAll('video')) video._tarFbChrome = null;
+  for (const el of document.querySelectorAll('.tar-fb-chrome, .tar-fb-bar')) {
+    el.classList.remove('tar-fb-chrome', 'tar-fb-show', 'tar-fb-bar');
   }
 }
 
 TAR.register({
   settingKey: 'videoControlsFacebook',
-  passes: [videoPass]
+  passes: [videoPass],
+  teardown
 });
