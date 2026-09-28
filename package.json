@@ -1,0 +1,13 @@
+{
+  "name": "threads-controls",
+  "private": true,
+  "description": "Dev tooling (tests) for the Threads Controls extension. Not part of the packaged extension.",
+  "scripts": {
+    "test": "playwright test --project=unit",
+    "test:e2e": "playwright test --project=e2e",
+    "test:all": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}
