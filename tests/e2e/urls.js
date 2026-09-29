@@ -33,6 +33,8 @@ module.exports = {
   },
   facebook: {
     // Public page video (FB's own control row + caption overlay).
-    video: 'https://www.facebook.com/facebook/videos/1807623153746790/'
+    video: 'https://www.facebook.com/facebook/videos/1807623153746790/',
+    // Reel viewer: a specific /reel/<id> opens logged-out (bare /reel/ does not).
+    reel: 'https://www.facebook.com/reel/1352331576418996/'
   }
 };

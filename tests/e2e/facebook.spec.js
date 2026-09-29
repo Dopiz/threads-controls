@@ -41,6 +41,18 @@ test.describe('Facebook', () => {
     await expectSoundSurvivesPauseResume(page, v.i);
   });
 
+  test('Reel viewer: caption moves out to the left, FB’s duplicate buttons go, the native bar is reachable', async ({ page }) => {
+    await open(page, urls.facebook.reel);
+    const v = await firstVideo(page);
+    await expect(page.locator('.tar-fb-reel-card')).toHaveCount(1);
+    const caption = await page.locator('[data-tar-reel-caption]').boundingBox();
+    expect(caption.x + caption.width).toBeLessThanOrEqual(v.x);
+    expect(await visiblePlatformMuteButtons(page, v.i)).toBe(0);
+    await expect(page.locator('.tar-fb-reel-hide[aria-label="暫停"]')).toBeHidden();
+    const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y).tagName, [v.x + v.w / 2, v.y + v.h - 20]);
+    expect(hit).toBe('VIDEO');
+  });
+
   test('switching Facebook off live restores FB’s player', async ({ page, settings }) => {
     await open(page, urls.facebook.video);
     const v = await firstVideo(page);

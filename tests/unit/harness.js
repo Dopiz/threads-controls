@@ -87,9 +87,9 @@ const user = (page, fn, arg) => evaluateIn(page, 'user', call(fn, arg));
  *                                    /media viewer path) instead of about:blank
  */
 async function load(page, { site, html = '', settings = {}, beforeLoad = '', extBeforeLoad = '', url = null }) {
-  const doc = `<!doctype html><html><head></head><body style="margin:0">${html}</body></html>`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">${html}</body></html>`;
   if (url) {
-    await page.route(url, (route) => route.fulfill({ contentType: 'text/html', body: doc }));
+    await page.route(url, (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: doc }));
     await page.goto(url);
   } else {
     await page.setContent(doc);

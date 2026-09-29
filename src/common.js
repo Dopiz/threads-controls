@@ -82,6 +82,7 @@ chrome.storage.sync.get(DEFAULTS, (stored) => {
     subtree: true
   });
   document.addEventListener('scroll', () => TAR.schedule(), { capture: true, passive: true });
+  window.addEventListener('resize', () => TAR.schedule(), { passive: true });
 });
 
 chrome.storage.onChanged.addListener((changes) => {
