@@ -3,7 +3,7 @@
 // clips (Instagram does — see instagram.spec.js).
 // page.evaluate = platform JS, user() = the native control bar, ext() = extension.
 const { test, expect } = require('@playwright/test');
-const { load, ext, user, setSettings, runPasses, flush, VIDEO } = require('./harness');
+const { load, ext, user, setSettings, runPasses, flush, settle, VIDEO } = require('./harness');
 
 const SITE = 'facebook';
 
@@ -11,9 +11,6 @@ const video = (page, n = 0) => page.evaluate((i) => {
   const v = document.querySelectorAll('video')[i];
   return { controls: v.controls, muted: v.muted, paused: v.paused, volume: +v.volume.toFixed(3), ...v.dataset };
 }, n);
-
-// Past the 600ms post-unmute window, so later volume changes count as the user's.
-const settle = (page) => flush(page, 700);
 
 const userPlay = (page) => user(page, () => document.querySelector('video').play());
 const userPause = (page) => user(page, () => document.querySelector('video').pause());

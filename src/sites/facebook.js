@@ -53,9 +53,11 @@ function fbHoverChrome(video, inside) {
 // ancestor of its seek slider that also holds several buttons. Labels are
 // localized, so anchor on the slider's untranslated "position" label; the
 // height cap keeps a mismatch from hiding the caption/owner block.
+// Runs every pass for every player, so it stops once the row is tagged.
 function hideFbControlRow(chrome) {
+  if (chrome.querySelector('.tar-fb-bar')) return;
   for (const slider of chrome.querySelectorAll('div[role="slider"]')) {
-    if (!/position/i.test(slider.getAttribute('aria-label') || '')) continue;
+    if (!TAR.isSeekSlider(slider)) continue;
     let row = slider.parentElement;
     while (row && row !== chrome && row.querySelectorAll('div[role="button"]').length < 2) {
       row = row.parentElement;
@@ -87,7 +89,7 @@ function videoPass() {
 
 function teardown() {
   clearTimeout(idleTimer);
-  for (const video of document.querySelectorAll('video')) video._tarFbChrome = null;
+  for (const video of document.querySelectorAll('video')) fbHoverChrome(video, false);
   for (const el of document.querySelectorAll('.tar-fb-chrome, .tar-fb-bar')) {
     el.classList.remove('tar-fb-chrome', 'tar-fb-show', 'tar-fb-compact', 'tar-fb-bar');
   }

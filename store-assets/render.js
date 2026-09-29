@@ -17,8 +17,8 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(__dirname, 'out');
 const manifest = require(path.join(ROOT, 'manifest.json'));
 
-const dataUri = (file, type) => `data:${type};base64,${fs.readFileSync(file).toString('base64')}`;
-const LOGO = dataUri(path.join(__dirname, 'logo.png'), 'image/png');
+const pngUri = (buf) => `data:image/png;base64,${buf.toString('base64')}`;
+const LOGO = pngUri(fs.readFileSync(path.join(__dirname, 'logo.png')));
 
 const TITLE = 'Threads Controls';
 const TAGLINE = 'Native video controls & spoiler auto-reveal';
@@ -129,12 +129,11 @@ const ASSETS = {
       </div>`
     })
   },
-  'screenshot-2-popup': { w: 1280, h: 800, html: popupShowcase }
+  'screenshot-2-popup': { w: 1280, h: 800, html: (popup) => popupShowcase(popup) }
 };
 
 // The real popup (src/popup/popup.html), rendered with a stubbed chrome API
 // at 2x, plus where its rows sit, for the callouts.
-let popupShot = null;
 async function renderPopup(browser) {
   const ctx = await browser.newContext({ viewport: { width: 280, height: 600 }, deviceScaleFactor: 2 });
   const p = await ctx.newPage();
@@ -164,11 +163,10 @@ async function renderPopup(browser) {
   });
   const png = await p.screenshot({ clip: { x: 0, y: 0, width: 280, height: Math.ceil(rows.height) } });
   await ctx.close();
-  popupShot = { src: 'data:image/png;base64,' + png.toString('base64'), rows };
+  return { src: pngUri(png), rows };
 }
 
-function popupShowcase() {
-  const { src, rows } = popupShot;
+function popupShowcase({ src, rows }) {
   const scale = 1.6;
   const popupW = 280 * scale, popupH = rows.height * scale;
   const left = 150, top = Math.round((800 - popupH) / 2) - 20;
@@ -208,10 +206,10 @@ function popupShowcase() {
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch();
-  await renderPopup(browser);
+  const popup = await renderPopup(browser);
   for (const [name, { w, h, html }] of Object.entries(ASSETS)) {
     const p = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
-    await p.setContent(html(), { waitUntil: 'networkidle' });
+    await p.setContent(html(popup), { waitUntil: 'networkidle' });
     await p.evaluate(() => document.fonts.ready);
     const png = await p.screenshot({ type: 'png' });
     // Store requirement: 24-bit PNG, no alpha (IHDR: bit depth 8, colour type 2).

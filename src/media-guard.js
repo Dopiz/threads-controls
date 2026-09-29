@@ -29,17 +29,18 @@
   //    unmuting; rewrite any off-level value. This also covers a freshly
   //    swapped-in <video> the extension's debounced pass hasn't picked up yet
   //    (~300ms at 100% otherwise — the burst when FB swaps players on unmute).
-  const pin = (el) => {
+  const pinned = (el, value) => {
     const level = levelFor(el);
-    if (!isNaN(level) && Math.abs(volumeDesc.get.call(el) - level) > 0.005) volumeDesc.set.call(el, level);
+    return !isNaN(level) && Math.abs(value - level) > 0.005 ? level : value;
+  };
+  const pin = (el) => {
+    const current = volumeDesc.get.call(el);
+    const level = pinned(el, current);
+    if (level !== current) volumeDesc.set.call(el, level);
   };
   Object.defineProperty(proto, 'volume', {
     get: volumeDesc.get,
-    set(value) {
-      const level = levelFor(this);
-      if (!isNaN(level) && Math.abs(value - level) > 0.005) value = level;
-      volumeDesc.set.call(this, value);
-    },
+    set(value) { volumeDesc.set.call(this, pinned(this, value)); },
     configurable: true
   });
   // An element never written to starts at 100%: pin before it becomes audible.

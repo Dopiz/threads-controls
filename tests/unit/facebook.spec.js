@@ -49,7 +49,7 @@ test('reveals the chrome while the pointer is over the video', async ({ page }) 
 });
 
 test('large players keep the gradient tail under the caption; small ones (Reels cards) drop it', async ({ page }) => {
-  const small = PLAYER.replace(/640px/g, '240px').replace('width:640px', 'width:240px');
+  const small = PLAYER.replace(/640px/g, '240px');
   await load(page, { site: 'facebook', html: PLAYER + small.replace('id="chrome"', 'id="small-chrome"').replace(/id="(row|owner|pause|seek|settings|mute)"/g, 'id="small-$1"') });
   const tail = (id) => page.evaluate((i) => getComputedStyle(document.getElementById(i), '::after').content, id);
   expect(await tail('chrome')).not.toBe('none');

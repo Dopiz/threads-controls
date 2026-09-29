@@ -6,15 +6,7 @@ const { test: base, chromium, expect } = require('@playwright/test');
 
 const EXTENSION = path.resolve(__dirname, '..', '..');
 
-const SETTINGS = {
-  revealText: true,
-  revealMedia: true,
-  textHighlight: '',
-  videoControlsThreads: true,
-  videoControlsInstagram: true,
-  videoControlsFacebook: true,
-  defaultVolume: 10
-};
+const SETTINGS = require('../settings');
 
 const test = base.extend({
   // eslint-disable-next-line no-empty-pattern
@@ -110,6 +102,14 @@ async function video(page, i) {
   return (await videos(page)).find((v) => v.i === i);
 }
 
+// First rendered video matching `filter`, scrolled into view; skips the test if
+// the post no longer has one (fixture deleted/changed — update urls.js).
+async function firstVideo(page, filter = () => true) {
+  const list = (await videos(page)).filter(filter);
+  test.skip(list.length === 0, 'fixture has no matching video any more — update tests/e2e/urls.js');
+  return center(page, list[0].i);
+}
+
 // Scroll a video to the viewport centre and let a pass run (they are debounced).
 async function center(page, i) {
   await page.evaluate((n) => document.querySelectorAll('video')[n].scrollIntoView({ block: 'center', inline: 'center' }), i);
@@ -180,7 +180,7 @@ async function expectSoundSurvivesPauseResume(page, i) {
 }
 
 module.exports = {
-  test, expect, SETTINGS,
-  open, dismissLoginWalls, videos, video, center, rewind, bar, click, clickBar,
+  test, expect,
+  open, videos, video, firstVideo, center, rewind, clickBar,
   visiblePlatformMuteButtons, expectSoundSurvivesPauseResume
 };

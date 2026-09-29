@@ -1,14 +1,8 @@
 const urls = require('./urls');
 const {
-  test, expect, open, videos, video, center, clickBar,
+  test, expect, open, video, firstVideo, clickBar,
   visiblePlatformMuteButtons, expectSoundSurvivesPauseResume
 } = require('./fixtures');
-
-async function mainVideo(page) {
-  const list = await videos(page);
-  test.skip(list.length === 0, 'fixture has no video any more — update tests/e2e/urls.js');
-  return center(page, list[0].i);
-}
 
 // FB's own control buttons (anything but links) still visible over the video.
 const visibleFbButtons = (page, i) => page.evaluate((n) => {
@@ -29,7 +23,7 @@ const visibleFbButtons = (page, i) => page.evaluate((n) => {
 test.describe('Facebook', () => {
   test('one control bar: FB’s own row and mute button are hidden, playing or paused', async ({ page }) => {
     await open(page, urls.facebook.video);
-    const v = await mainVideo(page);
+    const v = await firstVideo(page);
     expect(v.controls).toBe(true);
     await expect(page.locator('.tar-fb-bar').first()).toBeHidden();
     expect(await visiblePlatformMuteButtons(page, v.i)).toBe(0);
@@ -43,13 +37,13 @@ test.describe('Facebook', () => {
 
   test('sound survives pause/resume (FB re-mutes on play)', async ({ page }) => {
     await open(page, urls.facebook.video);
-    const v = await mainVideo(page);
+    const v = await firstVideo(page);
     await expectSoundSurvivesPauseResume(page, v.i);
   });
 
   test('switching Facebook off live restores FB’s player', async ({ page, settings }) => {
     await open(page, urls.facebook.video);
-    const v = await mainVideo(page);
+    const v = await firstVideo(page);
     await settings.set({ videoControlsFacebook: false });
     await page.waitForTimeout(800);
     expect((await video(page, v.i)).controls).toBe(false);

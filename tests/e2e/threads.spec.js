@@ -1,16 +1,8 @@
 const urls = require('./urls');
 const {
-  test, expect, open, videos, video, center, clickBar,
+  test, expect, open, videos, video, firstVideo, center, clickBar,
   visiblePlatformMuteButtons, expectSoundSurvivesPauseResume
 } = require('./fixtures');
-
-// First rendered video on the page, scrolled into view; skips if the post no
-// longer has one (fixture deleted/changed — update tests/e2e/urls.js).
-async function firstVideo(page, filter = () => true) {
-  const list = (await videos(page)).filter(filter);
-  test.skip(list.length === 0, 'fixture has no matching video any more — update tests/e2e/urls.js');
-  return center(page, list[0].i);
-}
 
 test.describe('Threads video', () => {
   test('single video: native controls replace the platform chrome and mute button', async ({ page }) => {

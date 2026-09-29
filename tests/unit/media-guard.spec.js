@@ -2,7 +2,8 @@ const { test, expect } = require('@playwright/test');
 const { load, VIDEO } = require('./harness');
 
 // media-guard.js runs in the page's MAIN world, so every media call it sees
-// comes from platform JS; managed videos (data-desired-volume) are pinned.
+// comes from platform JS; videos with a desired level (data-desired-volume, or
+// the page default the extension publishes) are pinned to it.
 
 test('pins platform volume writes on a managed video to its desired level', async ({ page }) => {
   await load(page, { site: null, html: VIDEO('data-desired-volume="0.2"') });

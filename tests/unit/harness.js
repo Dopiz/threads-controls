@@ -13,29 +13,23 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, 'src', p), 'utf8');
 
-const DEFAULT_SETTINGS = {
-  revealText: true,
-  revealMedia: true,
-  textHighlight: '',
-  videoControlsThreads: true,
-  videoControlsInstagram: true,
-  videoControlsFacebook: true,
-  defaultVolume: 10
-};
+const DEFAULT_SETTINGS = require('../settings');
 
-// chrome.storage stub: get() answers async like the real API; set() updates
-// the store and fires onChanged listeners with { key: { oldValue, newValue } }.
+// chrome.storage stub: get() answers async like the real API (and resolves
+// window.__tarReady once the extension's first pass has run); set() updates the
+// store and fires onChanged listeners with { key: { oldValue, newValue } }.
 function chromeStub(settings) {
   window.__store = settings;
   window.__onChanged = [];
-  window.__tarLoaded = false;
+  let ready;
+  window.__tarReady = new Promise((r) => { ready = r; });
   window.chrome = {
     storage: {
       sync: {
         get(defaults, cb) {
           setTimeout(() => {
             cb({ ...defaults, ...window.__store });
-            window.__tarLoaded = true;
+            ready();
           });
         },
         set(items, cb) {
@@ -124,10 +118,7 @@ async function load(page, { site, html = '', settings = {}, beforeLoad = '', ext
     read('common.js'),
     read(`sites/${site}.js`)
   ].join(';\n'));
-  await page.waitForFunction(async () => true); // let the page settle a tick
-  for (let i = 0; i < 50 && !(await ext(page, () => window.__tarLoaded)); i++) {
-    await page.waitForTimeout(10);
-  }
+  await ext(page, () => window.__tarReady);
 }
 
 // Write settings through the stub so onChanged fires like a popup change.
@@ -143,6 +134,10 @@ async function runPasses(page) {
 async function flush(page, ms = 30) {
   await page.waitForTimeout(ms);
 }
+
+// Wait out the extension's 600ms post-unmute window, so later volume changes
+// count as the user's own.
+const settle = (page) => flush(page, 700);
 
 // 20s of silence as 8kHz 8-bit mono WAV: a real, playable source, so paused /
 // play() / pause() behave for real (the unit project disables the autoplay
@@ -161,4 +156,4 @@ const SILENCE = (() => {
 const VIDEO = (attrs = '') =>
   `<video ${attrs} src="${SILENCE}" loop muted style="display:block;width:640px;height:360px"></video>`;
 
-module.exports = { load, ext, user, setSettings, runPasses, flush, VIDEO, SILENCE, DEFAULT_SETTINGS };
+module.exports = { load, ext, user, setSettings, runPasses, flush, settle, VIDEO };

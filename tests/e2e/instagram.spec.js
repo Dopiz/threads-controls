@@ -1,19 +1,13 @@
 const urls = require('./urls');
 const {
-  test, expect, open, videos, video, center, rewind, clickBar,
+  test, expect, open, videos, video, firstVideo, rewind, clickBar,
   visiblePlatformMuteButtons, expectSoundSurvivesPauseResume
 } = require('./fixtures');
-
-async function mainVideo(page) {
-  const list = await videos(page);
-  test.skip(list.length === 0, 'fixture has no video any more — update tests/e2e/urls.js');
-  return center(page, list[0].i);
-}
 
 test.describe('Instagram', () => {
   test('reel: IG chrome hidden, native controls on, no platform mute button', async ({ page }) => {
     await open(page, urls.instagram.reel);
-    const v = await mainVideo(page);
+    const v = await firstVideo(page);
     expect(v.controls).toBe(true);
     await expect(page.locator('.tar-ig-chrome').first()).toBeHidden();
     expect(await visiblePlatformMuteButtons(page, v.i)).toBe(0);
@@ -21,7 +15,7 @@ test.describe('Instagram', () => {
 
   test('reel: sound survives pause/resume (IG re-mutes on play) and a native seek', async ({ page }) => {
     await open(page, urls.instagram.reel);
-    const v = await mainVideo(page);
+    const v = await firstVideo(page);
     await expectSoundSurvivesPauseResume(page, v.i);
     await clickBar(page, v, 'timeline', { fraction: 0.2, wait: 1500 });
     expect(await video(page, v.i)).toMatchObject({ muted: false, volume: 0.1 });
@@ -29,7 +23,7 @@ test.describe('Instagram', () => {
 
   test('reel: a user mute sticks across pause/resume', async ({ page }) => {
     await open(page, urls.instagram.reel);
-    let v = await mainVideo(page);
+    let v = await firstVideo(page);
     await rewind(page, v.i);
     if ((await video(page, v.i)).paused) await clickBar(page, v, 'playPause');
     await clickBar(page, v, 'mute'); // unmute
@@ -61,7 +55,7 @@ test.describe('Instagram', () => {
 
   test('switching Instagram off live shows IG’s chrome again', async ({ page, settings }) => {
     await open(page, urls.instagram.reel);
-    const v = await mainVideo(page);
+    const v = await firstVideo(page);
     await settings.set({ videoControlsInstagram: false });
     await page.waitForTimeout(800);
     expect((await video(page, v.i)).controls).toBe(false);

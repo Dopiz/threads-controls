@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { load, user, setSettings, flush, VIDEO } = require('./harness');
+const { load, user, setSettings, flush, settle, VIDEO } = require('./harness');
 
 const PLAYER = `
   <div style="position:relative;width:480px;height:600px">
@@ -51,46 +51,42 @@ test.describe('sound carries across clips (Reels)', () => {
     const v = document.getElementById(i);
     return { muted: v.muted, paused: v.paused, volume: +v.volume.toFixed(3) };
   }, id);
-  const onUser = (page, id, fn) => user(page, ([i, f]) => new Function('v', f)(document.getElementById(i)), [id, fn]);
+  // The user acting on clip `id` through the native bar.
+  const userSet = (page, id, prop, value) =>
+    user(page, ([i, p, v]) => { document.getElementById(i)[p] = v; }, [id, prop, value]);
 
-  // User unmutes clip A through the native bar (optionally dragging the
-  // volume), then scrolls on: IG pauses A and plays B.
-  async function watchAThenScrollToB(page, { volume } = {}) {
-    await onUser(page, 'a', 'return v.play()');
-    await onUser(page, 'a', 'v.muted = false');
-    await flush(page, 700);
-    if (volume !== undefined) {
-      await onUser(page, 'a', `v.volume = ${volume}`);
-      await flush(page);
-    }
-    await page.evaluate(() => {
-      document.getElementById('a').pause();
-      document.getElementById('b').scrollIntoView();
-    });
-    await flush(page);
-    await page.evaluate(() => document.getElementById('b').play());
-    await flush(page, 100);
+  // User plays clip A and unmutes it through the native bar.
+  async function unmuteA(page) {
+    await user(page, () => document.getElementById('a').play());
+    await userSet(page, 'a', 'muted', false);
+    await settle(page);
   }
 
-  test('unmuting carries to the next clip, at the last level', async ({ page }) => {
-    await load(page, { site: 'instagram', html: REELS, beforeLoad: PLATFORM_MUTES_ON_PLAY });
-    await watchAThenScrollToB(page, { volume: 0.3 });
-    expect(await state(page, 'b')).toMatchObject({ paused: false, muted: false, volume: 0.3 });
-  });
-
-  test('muting carries to the next clip', async ({ page }) => {
-    await load(page, { site: 'instagram', html: REELS, beforeLoad: PLATFORM_MUTES_ON_PLAY });
-    await onUser(page, 'a', 'return v.play()');
-    await onUser(page, 'a', 'v.muted = false');
-    await flush(page, 700);
-    await onUser(page, 'a', 'v.muted = true');
-    await flush(page);
+  // The user scrolls on: IG pauses A and plays B (muting it, see above).
+  async function scrollToB(page) {
     await page.evaluate(() => {
       document.getElementById('a').pause();
       document.getElementById('b').scrollIntoView();
       return document.getElementById('b').play();
     });
     await flush(page, 100);
+  }
+
+  test('unmuting carries to the next clip, at the last level', async ({ page }) => {
+    await load(page, { site: 'instagram', html: REELS, beforeLoad: PLATFORM_MUTES_ON_PLAY });
+    await unmuteA(page);
+    await userSet(page, 'a', 'volume', 0.3);
+    await flush(page);
+    await scrollToB(page);
+    expect(await state(page, 'b')).toMatchObject({ paused: false, muted: false, volume: 0.3 });
+  });
+
+  test('muting carries to the next clip', async ({ page }) => {
+    await load(page, { site: 'instagram', html: REELS, beforeLoad: PLATFORM_MUTES_ON_PLAY });
+    await unmuteA(page);
+    await userSet(page, 'a', 'muted', true);
+    await flush(page);
+    await scrollToB(page);
     expect(await state(page, 'b')).toMatchObject({ paused: false, muted: true });
   });
 
@@ -103,9 +99,7 @@ test.describe('sound carries across clips (Reels)', () => {
 
   test('a platform mute on a clip that is off screen does not change the carried state', async ({ page }) => {
     await load(page, { site: 'instagram', html: REELS, beforeLoad: PLATFORM_MUTES_ON_PLAY });
-    await onUser(page, 'a', 'return v.play()');
-    await onUser(page, 'a', 'v.muted = false');
-    await flush(page, 700);
+    await unmuteA(page);
     // IG mutes the preloaded clip below the fold, and A once it has paused.
     await page.evaluate(() => {
       document.getElementById('b').muted = true;
@@ -114,28 +108,17 @@ test.describe('sound carries across clips (Reels)', () => {
     });
     await flush(page);
     expect((await state(page, 'b')).muted).toBe(true); // not unmuted while off screen
-    await page.evaluate(() => {
-      document.getElementById('b').scrollIntoView();
-      return document.getElementById('b').play();
-    });
-    await flush(page, 100);
+    await scrollToB(page);
     expect(await state(page, 'b')).toMatchObject({ paused: false, muted: false, volume: 0.1 });
   });
 
   test('the carried state resets when Instagram is switched off and on', async ({ page }) => {
     await load(page, { site: 'instagram', html: REELS, beforeLoad: PLATFORM_MUTES_ON_PLAY });
-    await onUser(page, 'a', 'return v.play()');
-    await onUser(page, 'a', 'v.muted = false');
-    await flush(page, 700);
+    await unmuteA(page);
     await setSettings(page, { videoControlsInstagram: false });
     await setSettings(page, { videoControlsInstagram: true });
     await flush(page);
-    await page.evaluate(() => {
-      document.getElementById('a').pause();
-      document.getElementById('b').scrollIntoView();
-      return document.getElementById('b').play();
-    });
-    await flush(page, 100);
+    await scrollToB(page);
     expect((await state(page, 'b')).muted).toBe(true);
   });
 });

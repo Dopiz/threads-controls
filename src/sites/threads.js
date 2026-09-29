@@ -181,12 +181,9 @@ function teardown() {
     delete el.dataset.tarClipped;
   }
   for (const video of document.querySelectorAll('video')) {
-    if (video._tarChrome) {
-      for (const el of video._tarChrome) el.style.visibility = '';
-      video._tarChrome = null;
-    }
     delete video.dataset.tarKeepChrome;
     delete video.dataset.clipSig;
+    hoverHideChrome(video, false);
   }
 }
 
