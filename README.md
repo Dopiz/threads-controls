@@ -33,7 +33,7 @@ Click the extension icon to open the popup:
 | **Site icons** | Click the Threads / Instagram / Facebook icons to enable or disable native video controls per site (grayed out = disabled). Default: only Threads enabled |
 | **Default Volume** | Set the default volume level (0–100%) for all videos |
 
-Videos default to muted — when unmuted, they play at the configured volume. On Instagram the sound carries from clip to clip: after you unmute (or mute), the next Reel starts the same way, at the volume you last set. Site toggles and the default volume apply immediately, without reloading the page.
+Videos default to muted — when unmuted, they play at the configured volume. On Instagram and Facebook the sound carries from clip to clip: after you unmute (or mute), the next Reel or video starts the same way, at the volume you last set. Site toggles and the default volume apply immediately, without reloading the page.
 
 ## Development
 

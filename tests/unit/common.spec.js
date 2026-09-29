@@ -1,11 +1,11 @@
 // Shared core (src/common.js + src/media-guard.js), with per-clip sound state:
-// driven through the Facebook site script, which does not carry sound across
-// clips (Instagram does — see instagram.spec.js).
+// driven through the Threads site script, which does not carry sound across
+// clips (Instagram and Facebook do — see carry-sound.spec.js).
 // page.evaluate = platform JS, user() = the native control bar, ext() = extension.
 const { test, expect } = require('@playwright/test');
 const { load, ext, user, setSettings, runPasses, flush, settle, VIDEO } = require('./harness');
 
-const SITE = 'facebook';
+const SITE = 'threads';
 
 const video = (page, n = 0) => page.evaluate((i) => {
   const v = document.querySelectorAll('video')[i];
@@ -210,7 +210,7 @@ test.describe('live toggle', () => {
     await expect(page.locator('#seek')).toHaveAttribute('data-seek-hidden', 'true');
     await expect(page.locator('html')).toHaveAttribute('data-tar-default-volume', '0.1');
 
-    await setSettings(page, { videoControlsFacebook: false });
+    await setSettings(page, { videoControlsThreads: false });
     await flush(page);
     const off = await video(page);
     expect(off.controls).toBe(false);
@@ -229,7 +229,7 @@ test.describe('live toggle', () => {
     });
     expect(seen).toBeCloseTo(0.8);
 
-    await setSettings(page, { videoControlsFacebook: true });
+    await setSettings(page, { videoControlsThreads: true });
     await flush(page);
     expect(await video(page)).toMatchObject({ controls: true, controlsEnabled: 'true', volume: 0.1, desiredVolume: '0.1' });
 
@@ -237,7 +237,7 @@ test.describe('live toggle', () => {
   });
 
   test('does nothing on a page that loads with the site already off', async ({ page }) => {
-    await load(page, { site: SITE, html: PLAYER, settings: { videoControlsFacebook: false } });
+    await load(page, { site: SITE, html: PLAYER, settings: { videoControlsThreads: false } });
     await runPasses(page);
     expect((await video(page)).controls).toBe(false);
     await expect(page.locator('#mute')).toBeVisible();

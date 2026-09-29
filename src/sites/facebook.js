@@ -25,10 +25,11 @@ const FB_STYLE = [
   '.tar-fb-reel-card { overflow: visible !important; }',
   '.tar-fb-reel-card [data-tar-reel-caption] { top: auto !important; left: auto !important; bottom: 0 !important;',
   '  right: calc(100% + 24px) !important; width: 320px !important; background: none !important; }',
+  '.tar-fb-reel-card [data-tar-reel-shade] { display: none !important; }',
   '.tar-fb-reel-inset [data-tar-reel-caption] { bottom: 60px !important; }',
   '.tar-fb-reel-hide { display: none !important; }',
-  '[data-tar-reel-overlay] { pointer-events: none !important; }',
-  '[data-tar-reel-overlay] :is(a, [role="button"], [role="link"]) { pointer-events: auto; }'
+  ':is([data-tar-reel-overlay], .tar-fb-reel-chrome) { pointer-events: none !important; }',
+  ':is([data-tar-reel-overlay], .tar-fb-reel-chrome) :is(a, [role="button"], [role="link"]) { pointer-events: auto; }'
 ].join('\n');
 
 // Below this video width the player counts as small (no gradient tail).
@@ -99,47 +100,93 @@ function hideFbControlRow(chrome) {
 // control bar is, with its own gradient and show/hide timing. Like IG's
 // desktop Reels, it moves out to the left of the video instead — or, when the
 // viewport leaves no room there, up by the bar's height — and FB's own
-// play/pause, mute/volume and search
-// buttons on the card go — the native bar covers those. The card clips its
-// content for the rounded corners, so it is un-clipped and the video takes
-// over the rounding. The overlay layer holding the header and caption covers
-// the whole video and would swallow the hover the native bar needs, so it
-// lets the pointer through (its links and buttons stay clickable). Found by
-// structure (labels are localized): the card is the video's nearest
-// overflow-clipping ancestor; the caption is the card's bottom-anchored
-// gradient block that does not hold the video; the overlay is the caption's
-// outermost ancestor that still does not hold the video.
+// play/pause, mute/volume and search buttons on the card go: the native bar
+// covers those. The card clips its content for the rounded corners, so it is
+// un-clipped and the video takes over the rounding. The layers over the video
+// (FB's "Video player" chrome, and logged out a separate overlay) would
+// swallow the hover the native bar needs, so they let the pointer through
+// (their links and buttons stay clickable).
+//
+// Found by structure, since labels are localized and the logged-in and
+// logged-out DOMs differ:
+//  - card: the video's nearest overflow-clipping ancestor;
+//  - caption: the outermost absolutely positioned block in the card, anchored
+//    to its bottom (lower half), that holds text but not the video. Logged out
+//    it carries the gradient itself; logged in the gradient is a separate,
+//    empty layer ("shade"), hidden once the caption has moved out;
+//  - overlay: the caption's outermost ancestor that still does not hold the
+//    video.
+// Logged in, FB mounts the caption (inside its "Video player" chrome) only
+// while the pointer is over the Reel, so the card is handled on its own and
+// the caption is tagged whenever it (re)appears — right away, from
+// watchReelCaptions, so it is never painted over the video first.
 const REEL_CAPTION_SPACE = 320 + 24 + 16;
 const REEL_BUTTONS = /暫停|播放|靜音|音量|搜尋|pause|play|mute|volume|search/i;
-function layoutReel(video) {
-  // (A card already un-clipped by an earlier pass is recognized by its class.)
+
+function findReelCard(video) {
+  if (video._tarReelCard && video._tarReelCard.isConnected && video._tarReelCard.contains(video)) {
+    return video._tarReelCard;
+  }
+  // (A card an earlier pass un-clipped is recognized by its class.)
   const isCard = (el) => el.classList.contains('tar-fb-reel-card') || el.classList.contains('tar-fb-reel-inset') ||
     getComputedStyle(el).overflow === 'hidden';
   let card = video.parentElement;
   while (card && card !== document.body && !isCard(card)) card = card.parentElement;
-  if (!card || card === document.body) return;
+  video._tarReelCard = card && card !== document.body ? card : null;
+  return video._tarReelCard;
+}
+
+function tagReelCaption(video, card) {
+  if (card.querySelector('[data-tar-reel-caption]')) return;
   const cardRect = card.getBoundingClientRect();
-  let caption = card.querySelector('[data-tar-reel-caption]');
-  if (!caption) {
-    caption = Array.from(card.querySelectorAll('div')).find((el) => {
-      if (el.contains(video) || !getComputedStyle(el).backgroundImage.includes('gradient')) return false;
-      const r = el.getBoundingClientRect();
-      return Math.abs(r.bottom - cardRect.bottom) < 2 && r.top > cardRect.top + cardRect.height / 2;
-    });
-    if (!caption) return;
-    caption.dataset.tarReelCaption = '1';
-    let overlay = caption;
-    while (overlay.parentElement !== card && !overlay.parentElement.contains(video)) overlay = overlay.parentElement;
-    overlay.dataset.tarReelOverlay = '1';
-    video.style.borderRadius = getComputedStyle(card).borderRadius;
+  const blocks = Array.from(card.querySelectorAll('div')).filter((el) => {
+    if (el.contains(video)) return false;
+    const r = el.getBoundingClientRect();
+    return Math.abs(r.bottom - cardRect.bottom) < 2 && r.top > cardRect.top + cardRect.height / 2;
+  });
+  const isTextBlock = (el) => getComputedStyle(el).position === 'absolute' && el.innerText.trim();
+  const caption = blocks.find((el) => isTextBlock(el) && !blocks.some((o) => o !== el && o.contains(el) && isTextBlock(o)));
+  if (!caption) return;
+  caption.dataset.tarReelCaption = '1';
+  for (const el of blocks) {
+    if (!el.innerText.trim() && getComputedStyle(el).backgroundImage.includes('gradient')) el.dataset.tarReelShade = '1';
   }
-  const room = cardRect.left >= REEL_CAPTION_SPACE;
+  let overlay = caption;
+  while (overlay.parentElement !== card && !overlay.parentElement.contains(video)) overlay = overlay.parentElement;
+  overlay.dataset.tarReelOverlay = '1';
+}
+
+// Returns the Reel card (once found), else null.
+function layoutReel(video) {
+  const card = findReelCard(video);
+  if (!card) return null;
+  if (!video.style.borderRadius) video.style.borderRadius = getComputedStyle(card).borderRadius;
+  const room = card.getBoundingClientRect().left >= REEL_CAPTION_SPACE;
   card.classList.toggle('tar-fb-reel-card', room);
   card.classList.toggle('tar-fb-reel-inset', !room);
+  tagReelCaption(video, card);
+  const caption = card.querySelector('[data-tar-reel-caption]');
   for (const el of card.querySelectorAll('div[role="button"], div[role="slider"]')) {
-    if (caption.contains(el) || el.classList.contains('tar-fb-reel-hide')) continue;
+    if ((caption && caption.contains(el)) || el.classList.contains('tar-fb-reel-hide')) continue;
     if (REEL_BUTTONS.test(el.getAttribute('aria-label') || '')) el.classList.add('tar-fb-reel-hide');
   }
+  return card;
+}
+
+// Tag a (re)mounted caption in the same task it appears — MutationObserver
+// callbacks run before the next paint — instead of on the debounced pass.
+let reelObserver = null;
+function watchReelCaptions() {
+  if (reelObserver) return;
+  reelObserver = new MutationObserver((mutations) => {
+    if (!location.pathname.startsWith('/reel/') || !TAR.videoControlsEnabled()) return;
+    for (const video of document.querySelectorAll('video')) {
+      const card = video._tarReelCard;
+      if (!card || !card.isConnected || card.querySelector('[data-tar-reel-caption]')) continue;
+      if (mutations.some((m) => m.addedNodes.length && card.contains(m.target))) tagReelCaption(video, card);
+    }
+  });
+  reelObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 function videoPass() {
@@ -148,12 +195,13 @@ function videoPass() {
   TAR.watchHover(fbHoverChrome);
   TAR.hidePlatformMuteButtons();
   const inReelViewer = location.pathname.startsWith('/reel/');
+  if (inReelViewer) watchReelCaptions();
   for (const video of document.querySelectorAll('video')) {
     const width = video.getBoundingClientRect().width;
     if (width === 0) continue;
     TAR.enableNativeControls(video);
     TAR.hideSeekSliderNear(video);
-    if (inReelViewer) layoutReel(video);
+    const reelCard = inReelViewer ? layoutReel(video) : null;
     if (!video._tarFbRestListeners) {
       video._tarFbRestListeners = true;
       video.addEventListener('play', () => restChrome(video));
@@ -161,10 +209,16 @@ function videoPass() {
     }
     // Re-run each pass to catch React-replaced nodes; classList.add is idempotent.
     for (const chrome of TAR.findPlayerChrome(video)) {
+      hideFbControlRow(chrome);
+      if (reelCard && reelCard.contains(chrome)) {
+        // Holds the caption on a Reel card: stays visible (see layoutReel).
+        chrome.classList.remove('tar-fb-chrome', 'tar-fb-show', 'tar-fb-compact', 'tar-fb-rest');
+        chrome.classList.add('tar-fb-reel-chrome');
+        continue;
+      }
       chrome.classList.add('tar-fb-chrome');
       chrome.classList.toggle('tar-fb-compact', width < FB_COMPACT_WIDTH);
       chrome.classList.toggle('tar-fb-rest', width < FB_COMPACT_WIDTH && video.paused && !video._tarFbHover);
-      hideFbControlRow(chrome);
     }
   }
 }
@@ -172,17 +226,24 @@ function videoPass() {
 function teardown() {
   clearTimeout(idleTimer);
   for (const video of document.querySelectorAll('video')) fbHoverChrome(video, false);
-  const classes = ['tar-fb-chrome', 'tar-fb-show', 'tar-fb-compact', 'tar-fb-rest', 'tar-fb-bar', 'tar-fb-reel-card', 'tar-fb-reel-inset', 'tar-fb-reel-hide'];
+  const classes = ['tar-fb-chrome', 'tar-fb-show', 'tar-fb-compact', 'tar-fb-rest', 'tar-fb-bar',
+    'tar-fb-reel-card', 'tar-fb-reel-inset', 'tar-fb-reel-chrome', 'tar-fb-reel-hide'];
   for (const el of document.querySelectorAll(classes.map((c) => '.' + c).join(', '))) el.classList.remove(...classes);
-  for (const el of document.querySelectorAll('[data-tar-reel-caption], [data-tar-reel-overlay]')) {
+  for (const el of document.querySelectorAll('[data-tar-reel-caption], [data-tar-reel-shade], [data-tar-reel-overlay]')) {
     delete el.dataset.tarReelCaption;
+    delete el.dataset.tarReelShade;
     delete el.dataset.tarReelOverlay;
   }
-  for (const video of document.querySelectorAll('video')) video.style.borderRadius = '';
+  for (const video of document.querySelectorAll('video')) {
+    video.style.borderRadius = '';
+    video._tarReelCard = null;
+  }
 }
 
 TAR.register({
   settingKey: 'videoControlsFacebook',
   passes: [videoPass],
-  teardown
+  teardown,
+  // Like IG: an unmute (or mute) carries to the next Reel / feed video.
+  carrySound: true
 });

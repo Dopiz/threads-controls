@@ -237,8 +237,8 @@ TAR.onScreen = function (video) {
   return w > 0 && h > 0 && w * h >= r.width * r.height * 0.5;
 };
 
-// carrySound sites: put the page-wide sound state on a clip that is (about to
-// be) on screen — muted or not as the user last chose, at their last level.
+// carrySound sites: put the page-wide sound state on a clip — muted or not as
+// the user last chose, at their last level.
 TAR.applyCarriedSound = function (video) {
   const state = soundState(video);
   TAR.setLevel(video, TAR.sound.volume ?? TAR.defaultLevel());
@@ -248,6 +248,30 @@ TAR.applyCarriedSound = function (video) {
   if (!video.muted) state.unmuteAt = Date.now();
 };
 
+// Whether a clip should take the carried state now. A carried mute goes on any
+// clip at once — muting never doubles up audio — including one that starts
+// playing while still sliding in (Reels start the next clip mid-transition). A
+// carried unmute only goes on a clip playing on screen, so a preloaded one
+// never sounds in the background; one that starts off screen gets it from
+// carryObserver as it scrolls in.
+TAR.wantsCarriedSound = function (video) {
+  if (!TAR.sound || video.muted === TAR.sound.muted) return false;
+  return TAR.sound.muted || (!video.paused && TAR.onScreen(video));
+};
+
+let carryObserver = null;
+function observeCarry(video) {
+  if (!carryObserver) {
+    carryObserver = new IntersectionObserver((entries) => {
+      for (const { target, intersectionRatio } of entries) {
+        if (intersectionRatio >= 0.5 && target.dataset.controlsEnabled === 'true' &&
+            TAR.wantsCarriedSound(target)) TAR.applyCarriedSound(target);
+      }
+    }, { threshold: 0.5 });
+  }
+  carryObserver.observe(video);
+}
+
 TAR.enableNativeControls = function (video) {
   video.controls = true;
   if (video.dataset.controlsEnabled === 'true') return;
@@ -255,9 +279,10 @@ TAR.enableNativeControls = function (video) {
   video.style.objectFit = 'cover';
   video._tarSound = null; // fresh bookkeeping, also after a live toggle-off/on
   TAR.setLevel(video, TAR.defaultLevel());
-  // A carried "unmuted" only goes on a clip that is playing on screen; a
-  // preloaded off-screen one gets it from the play listener when it starts.
-  if (TAR.sound && !video.paused && TAR.onScreen(video)) TAR.applyCarriedSound(video);
+  if (TAR.sound) {
+    observeCarry(video);
+    if (TAR.wantsCarriedSound(video)) TAR.applyCarriedSound(video);
+  }
 
   // Listeners go on once per element: a live toggle-off (teardown) resets the
   // state above, and a later re-enable must not stack duplicates.
@@ -272,8 +297,7 @@ TAR.enableNativeControls = function (video) {
   // changed default level, or the user's latest slider drag. Per-video,
   // transient — a brand new clip still starts muted at the default, so nothing
   // is remembered across clips — unless the site carries sound (TAR.sound), in
-  // which case each clip picks up the page-wide state when it starts playing on
-  // screen.
+  // which case each clip picks up the page-wide state (see wantsCarriedSound).
   const restoreSound = () => {
     soundState(video).unmuteAt = Date.now();
     TAR.markSelfWrite(video);
@@ -293,7 +317,7 @@ TAR.enableNativeControls = function (video) {
     if (video.dataset.controlsEnabled !== 'true') return;
     soundState(video).playAt = Date.now();
     if (TAR.sound) {
-      if (video.muted !== TAR.sound.muted && TAR.onScreen(video)) TAR.applyCarriedSound(video);
+      if (TAR.wantsCarriedSound(video)) TAR.applyCarriedSound(video);
     } else if (video.muted && hadSound()) {
       restoreSound();
     }
@@ -311,8 +335,7 @@ TAR.enableNativeControls = function (video) {
       if (origin === 'user') {
         // The user's own mute/unmute sets the state the next clips carry.
         TAR.sound.muted = video.muted;
-      } else if (origin === 'platform' && !video.paused && video.muted !== TAR.sound.muted &&
-          TAR.onScreen(video)) {
+      } else if (origin === 'platform' && TAR.wantsCarriedSound(video)) {
         TAR.applyCarriedSound(video);
         return;
       }
