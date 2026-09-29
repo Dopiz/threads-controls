@@ -148,6 +148,22 @@ test.describe('Reel viewer (/reel/<id>)', () => {
     await expect(page.locator('#more')).toBeVisible();
   });
 
+  test('a long moved-out caption scrolls under the wheel instead of switching Reels', async ({ page }) => {
+    // Platform stand-in: wheel anywhere in the viewer means next/previous Reel.
+    const PLATFORM_WHEEL = `window.__reelSwitches = 0;
+      document.addEventListener('wheel', () => { window.__reelSwitches++; });`;
+    const long = REEL.replace('<div role="button" id="see-more">See more</div>',
+      '<div role="button" id="see-more">See more</div><div style="height:900px">long text</div>');
+    await load(page, { site: 'facebook', url, html: long, beforeLoad: PLATFORM_WHEEL });
+    const caption = await page.locator('#caption').boundingBox();
+    expect(caption.height).toBeLessThanOrEqual(620); // capped at the video's height
+    await page.mouse.move(caption.x + caption.width / 2, caption.y + caption.height / 2);
+    await page.mouse.wheel(0, 200);
+    await flush(page, 200);
+    expect(await page.evaluate(() => document.getElementById('caption').scrollTop)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.__reelSwitches)).toBe(0);
+  });
+
   test('lets the pointer through the overlay to the video, links stay clickable', async ({ page }) => {
     await load(page, { site: 'facebook', url, html: REEL });
     const hit = (x, y) => page.evaluate(([a, b]) => document.elementFromPoint(a, b).id || document.elementFromPoint(a, b).tagName, [x, y]);

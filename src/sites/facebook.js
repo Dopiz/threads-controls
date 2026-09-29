@@ -24,7 +24,11 @@ const FB_STYLE = [
   // Reel viewer (see layoutReel below).
   '.tar-fb-reel-card { overflow: visible !important; }',
   '.tar-fb-reel-card [data-tar-reel-caption] { top: auto !important; left: auto !important; bottom: 0 !important;',
-  '  right: calc(100% + 24px) !important; width: 320px !important; background: none !important; }',
+  '  right: calc(100% + 24px) !important; width: 320px !important; background: none !important;',
+  // Out beside the video it takes the pointer again and scrolls when long
+  // (an expanded caption), capped at the video's height.
+  '  pointer-events: auto !important; max-height: 100% !important; overflow-y: auto !important;',
+  '  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.3) transparent; }',
   '.tar-fb-reel-card [data-tar-reel-shade] { display: none !important; }',
   '.tar-fb-reel-inset [data-tar-reel-caption] { bottom: 60px !important; }',
   '.tar-fb-reel-hide { display: none !important; }',
@@ -148,6 +152,11 @@ function tagReelCaption(video, card) {
   const caption = blocks.find((el) => isTextBlock(el) && !blocks.some((o) => o !== el && o.contains(el) && isTextBlock(o)));
   if (!caption) return;
   caption.dataset.tarReelCaption = '1';
+  // FB turns wheel over the viewer into next/previous Reel; over a moved-out
+  // caption that can scroll, the wheel scrolls the caption instead.
+  caption.addEventListener('wheel', (e) => {
+    if (caption.closest('.tar-fb-reel-card') && caption.scrollHeight > caption.clientHeight) e.stopPropagation();
+  }, { passive: true });
   for (const el of blocks) {
     if (!el.innerText.trim() && getComputedStyle(el).backgroundImage.includes('gradient')) el.dataset.tarReelShade = '1';
   }
