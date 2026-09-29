@@ -5,11 +5,13 @@ const DEFAULTS = {
   videoControlsThreads: true,
   videoControlsInstagram: false,
   videoControlsFacebook: false,
-  defaultVolume: 10
+  defaultVolume: 10,
+  ambientLight: false
 };
 
 const toggleText = document.getElementById('toggle-text');
 const toggleMedia = document.getElementById('toggle-media');
+const toggleAmbient = document.getElementById('toggle-ambient');
 const swatch = document.getElementById('text-color-swatch');
 const dropdown = document.getElementById('text-color-dropdown');
 const SITE_TOGGLES = [
@@ -25,6 +27,7 @@ document.getElementById('version').textContent = 'v' + chrome.runtime.getManifes
 chrome.storage.sync.get(DEFAULTS, (settings) => {
   toggleText.checked = settings.revealText;
   toggleMedia.checked = settings.revealMedia;
+  toggleAmbient.checked = settings.ambientLight;
   updateSwatch(settings.textHighlight);
   for (const { button, key } of SITE_TOGGLES) {
     button.classList.toggle('off', !settings[key]);
@@ -39,6 +42,10 @@ toggleText.addEventListener('change', () => {
 
 toggleMedia.addEventListener('change', () => {
   chrome.storage.sync.set({ revealMedia: toggleMedia.checked });
+});
+
+toggleAmbient.addEventListener('change', () => {
+  chrome.storage.sync.set({ ambientLight: toggleAmbient.checked });
 });
 
 swatch.addEventListener('click', (e) => {

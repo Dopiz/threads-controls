@@ -5,7 +5,8 @@ const DEFAULTS = {
   videoControlsThreads: true,
   videoControlsInstagram: false,
   videoControlsFacebook: false,
-  defaultVolume: 10
+  defaultVolume: 10,
+  ambientLight: false
 };
 
 // Shared core for all site scripts. A site file synchronously calls
@@ -398,12 +399,144 @@ TAR.teardownVideoControls = function () {
     video._tarSound = null;
     for (const key of ['controlsEnabled', 'desiredVolume', 'tarJsMuteAt']) delete video.dataset[key];
   }
+  TAR.ambientLight([]);
   for (const el of document.querySelectorAll('.tar-hide-mute')) el.classList.remove('tar-hide-mute');
   for (const slider of document.querySelectorAll('div[role="slider"][data-seek-hidden="true"]')) {
     slider.style.display = '';
     delete slider.dataset.seekHidden;
   }
 };
+
+// Ambient light (Reels viewers), like YouTube's ambient mode: the clip's own
+// colours glow out around it. A canvas a bit larger than the video's card lies
+// behind it, and the whole frame is drawn into its middle, blurred, so what
+// shows past the card's edges is the frame's own edge colours spilling out. It
+// follows the picture at up to 30fps, each draw blended over the last so a cut
+// fades over (quickly) instead of flashing.
+//
+// The canvas is low-res (the blur needs no detail) and scaled up, and smoothed,
+// by CSS; a mask fades it out towards its sides, so it never ends in a hard
+// edge. It goes right before the card (the video's clipping ancestor, which
+// would cut the glow off) — same containing block, so the card's offsets place
+// it — without a z-index, so it paints in tree order: after the backgrounds
+// around it, before the (positioned) card. z-index -1 would go under every
+// background up to the nearest stacking context, and logged-in FB has a black
+// one there.
+const AMBIENT_STYLE = [
+  'canvas[data-tar-ambient] { position: absolute; pointer-events: none;',
+  '  filter: blur(24px) saturate(1.4); opacity: 0; transition: opacity 0.6s ease;',
+  '  mask-composite: intersect; }',
+  'canvas[data-tar-ambient="lit"] { opacity: 1; }'
+].join('\n');
+const AMBIENT_FRAME_MS = 1000 / 30 - 2; // (slack for rAF jitter)
+const AMBIENT_PIXELS = 64; // canvas width
+// How far the glow reaches past the card, as a share of the card's width
+// (sideways, capped by the room to the viewport's edge) and height.
+const AMBIENT_SPREAD_X = 0.3;
+const AMBIENT_SPREAD_Y = 0.12;
+let ambientGlows = []; // the glows on the page (the draw loop runs while there are any)
+let ambientLastDraw = 0;
+
+// One side of the glow's mask: from nothing at the edge to full over `size`
+// px, eased (a linear fade leaves a visible outline).
+const ambientFade = ([direction, size]) => `linear-gradient(${direction}, transparent,
+  rgba(0, 0, 0, 0.15) ${size * 0.35}px, rgba(0, 0, 0, 0.5) ${size * 0.65}px, #000 ${size}px)`;
+
+// `clips` is the [video, card] pairs to light; every other glow is removed.
+// Runs every pass, so it only touches a glow's styles when its card moved.
+TAR.ambientLight = function (clips) {
+  const wanted = new Map(TAR.settings.ambientLight ? clips : []);
+  for (const glow of ambientGlows) {
+    const video = glow._tarVideo;
+    if (wanted.get(video) === glow.nextElementSibling) continue;
+    glow.remove();
+    if (glow._tarPositioned) glow._tarPositioned.style.position = '';
+    if (video._tarGlow === glow) video._tarGlow = null;
+  }
+  const wasRunning = ambientGlows.length > 0;
+  ambientGlows = [];
+  for (const [video, card] of wanted) {
+    TAR.ensureStyle('tar-ambient-style', AMBIENT_STYLE);
+    let glow = video._tarGlow;
+    if (!glow || !glow.isConnected) {
+      glow = video._tarGlow = document.createElement('canvas');
+      glow.dataset.tarAmbient = '';
+      glow._tarVideo = video;
+      card.before(glow);
+      // Positioned, the card paints over the glow (a static one would not).
+      if (getComputedStyle(card).position === 'static') {
+        card.style.position = 'relative';
+        glow._tarPositioned = card;
+      }
+    }
+    ambientGlows.push(glow);
+    const width = card.offsetWidth;
+    const height = card.offsetHeight;
+    if (!width || !height) continue;
+    // Not past the viewport's sides, which could make the page scroll sideways.
+    const rect = card.getBoundingClientRect();
+    const dx = Math.max(0, Math.min(width * AMBIENT_SPREAD_X, rect.left, window.innerWidth - rect.right));
+    const dy = height * AMBIENT_SPREAD_Y;
+    const layout = [card.offsetLeft, card.offsetTop, width, height, dx].join();
+    if (glow._tarLayout === layout) continue;
+    glow._tarLayout = layout;
+    const s = glow.style;
+    s.left = card.offsetLeft - dx + 'px';
+    s.top = card.offsetTop - dy + 'px';
+    s.width = width + 2 * dx + 'px';
+    s.height = height + 2 * dy + 'px';
+    s.maskImage = [['to right', dx], ['to left', dx], ['to bottom', dy], ['to top', dy]].map(ambientFade).join(', ');
+    // Canvas pixels per CSS pixel, and where the card sits in the canvas.
+    const scale = AMBIENT_PIXELS / (width + 2 * dx);
+    const pixels = Math.round((height + 2 * dy) * scale);
+    if (glow.width !== AMBIENT_PIXELS || glow.height !== pixels) {
+      glow.width = AMBIENT_PIXELS;
+      glow.height = pixels; // (clears it: redraw)
+      glow._tarTime = null;
+    }
+    glow._tarFrame = [dx * scale, dy * scale, width * scale, height * scale];
+  }
+  if (ambientGlows.length && !wasRunning) requestAnimationFrame(ambientLoop);
+};
+
+// Paced by requestAnimationFrame (which also stops in a background tab).
+function ambientLoop(now) {
+  if (!ambientGlows.length) return;
+  if (now - ambientLastDraw >= AMBIENT_FRAME_MS) {
+    ambientLastDraw = now;
+    drawGlows();
+  }
+  requestAnimationFrame(ambientLoop);
+}
+
+// Redraw each glow on screen while its picture changes (playing, seeked, or a
+// new clip in the element), for a few frames past the change so the blend
+// settles, then leave it be. Cheapest checks first: most glows (paused or
+// preloaded clips) stop at the settle count, before any layout read.
+function drawGlows() {
+  for (const glow of ambientGlows) {
+    const video = glow._tarVideo;
+    if (!glow._tarFrame || video.readyState < 2) continue;
+    if (video.currentTime !== glow._tarTime || video.currentSrc !== glow._tarSrc) {
+      const fresh = glow._tarTime == null || video.currentSrc !== glow._tarSrc;
+      glow._tarTime = video.currentTime;
+      glow._tarSrc = video.currentSrc;
+      glow._tarSettle = 12;
+      if (fresh) glow._tarBlend = 1;
+    }
+    if (!glow._tarSettle) continue;
+    const r = video.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight) continue;
+    glow._tarSettle--;
+    const [x, y, w, h] = glow._tarFrame;
+    const ctx = glow.getContext('2d');
+    ctx.filter = `blur(${Math.max(2, x / 3)}px)`;
+    ctx.globalAlpha = glow._tarBlend || 0.35;
+    glow._tarBlend = 0;
+    try { ctx.drawImage(video, x, y, w, h); } catch (e) { continue; }
+    glow.dataset.tarAmbient = 'lit';
+  }
+}
 
 // The platform's own seek/progress slider: a div[role="slider"] whose label
 // (left untranslated by the platforms) names it a position control.
