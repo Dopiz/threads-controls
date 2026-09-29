@@ -48,6 +48,7 @@ HEADED=1 npm run test:e2e   # visible window (PowerShell: $env:HEADED=1; npm run
 ```
 
 - **Unit** (`tests/unit/`) loads the content scripts into a local page with a stubbed `chrome.storage`, split across the same JS worlds as on the real sites: the page (platform) world with `media-guard.js`, the extension's isolated world, and a "user" world standing in for the browser's native control bar.
+- **Store images**: `npm run store-assets` renders the Chrome Web Store screenshots (1280x800) and promo tiles (440x280, 1400x560) into `store-assets/out/`, using `store-assets/logo.png` and the real popup. Re-run after changing the popup or bumping the version.
 - **E2E** (`tests/e2e/`) drives real posts listed in [`tests/e2e/urls.js`](tests/e2e/urls.js) — single/carousel videos, Reels, spoiler text and media. Third-party posts can disappear: a test whose post is gone is skipped with a note, and the file explains how to find replacements.
 
 ## Privacy
