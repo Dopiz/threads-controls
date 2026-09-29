@@ -220,6 +220,7 @@ function videoPass() {
   TAR.watchHover(fbHoverChrome);
   const inViewer = inReelViewer();
   if (inViewer) watchReelCaptions();
+  const lit = [];
   for (const video of document.querySelectorAll('video')) {
     const width = video.getBoundingClientRect().width;
     if (width === 0 || !isReel(video)) continue;
@@ -227,6 +228,7 @@ function videoPass() {
     TAR.hideSeekSliderNear(video);
     TAR.hidePlatformMuteButtons(TAR.findPlayerChrome(video));
     const reelCard = inViewer ? layoutReel(video) : null;
+    if (reelCard) lit.push([video, reelCard]);
     if (!video._tarFbRestListeners) {
       video._tarFbRestListeners = true;
       video.addEventListener('play', () => restChrome(video));
@@ -246,6 +248,8 @@ function videoPass() {
       chrome.classList.toggle('tar-fb-rest', width < FB_COMPACT_WIDTH && video.paused && !video._tarFbHover);
     }
   }
+  // The Reel viewer lights each clip from behind its card (TAR.ambientLight).
+  TAR.ambientLight(lit);
 }
 
 function teardown() {
