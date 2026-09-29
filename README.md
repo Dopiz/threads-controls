@@ -8,7 +8,7 @@ Native video controls for Threads, Instagram and Facebook, plus spoiler auto-rev
 
 ## Features
 
-- Enable native browser video controls (playback, seek, volume, fullscreen) on Threads, Instagram and Facebook — toggle each site independently
+- Enable native browser video controls (playback, seek, volume, fullscreen) on Threads, Instagram and Facebook Reels — toggle each site independently
 - Set a default volume for all videos, kept stable against the platforms' forced volume resets
 - Automatically reveals hidden spoiler text, images, and videos on Threads
 - Highlight revealed spoiler text with a background color to distinguish originally hidden content
@@ -30,7 +30,7 @@ Click the extension icon to open the popup:
 
 | Option | Description |
 |--------|-------------|
-| **Site icons** | Click the Threads / Instagram / Facebook icons to enable or disable native video controls per site (grayed out = disabled). Default: only Threads enabled |
+| **Site icons** | Click the Threads / Instagram / Facebook icons to enable or disable native video controls per site (grayed out = disabled). On Facebook only Reels are handled; regular videos keep FB's own player. Default: only Threads enabled |
 | **Default Volume** | Set the default volume level (0–100%) for all videos |
 
 Videos default to muted — when unmuted, they play at the configured volume. On Instagram and Facebook the sound carries from clip to clip: after you unmute (or mute), the next Reel or video starts the same way, at the volume you last set. Site toggles and the default volume apply immediately, without reloading the page.

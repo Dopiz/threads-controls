@@ -9,10 +9,11 @@ const { load, user, setSettings, flush, settle, VIDEO } = require('./harness');
 // button is hidden — mutes every clip it plays.
 for (const [site, key] of [['instagram', 'videoControlsInstagram'], ['facebook', 'videoControlsFacebook']]) {
   test.describe(`${site}: sound carries across clips (Reels)`, () => {
+    // (The /reel/ links mark them as Reels for Facebook, which handles only those.)
     const REELS = `
-      ${VIDEO('id="a"')}
+      <div style="width:640px">${VIDEO('id="a"')}<a href="/reel/a/">a</a></div>
       <div style="height:900px"></div>
-      ${VIDEO('id="b"')}
+      <div style="width:640px">${VIDEO('id="b"')}<a href="/reel/b/">b</a></div>
       <div style="height:900px"></div>`;
     const PLATFORM_MUTES_ON_PLAY = `
       for (const v of document.querySelectorAll('video')) {

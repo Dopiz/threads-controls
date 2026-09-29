@@ -189,19 +189,35 @@ function watchReelCaptions() {
   reelObserver.observe(document.body, { childList: true, subtree: true });
 }
 
+// Facebook: Reels only — the Reel viewer, and Reels elsewhere (the feed's
+// Reels cards, shared Reels), recognized by a /reel/ link on the video's own
+// card: its ancestors up to where they grow well past the video. Regular
+// videos (feed posts, /watch, /videos) are left entirely to FB.
+const inReelViewer = () => location.pathname.startsWith('/reel/');
+function isReel(video) {
+  if (video._tarIsReel || inReelViewer() || video.closest('a[href*="/reel/"]')) return (video._tarIsReel = true);
+  const vr = video.getBoundingClientRect();
+  for (let n = video.parentElement, i = 0; n && n !== document.body && i < 12; n = n.parentElement, i++) {
+    const r = n.getBoundingClientRect();
+    if (r.width > vr.width * 1.5 || r.height > vr.height * 1.6) break;
+    if (n.querySelector('a[href*="/reel/"]')) return (video._tarIsReel = true);
+  }
+  return false;
+}
+
 function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
   TAR.ensureStyle('tar-fb-style', FB_STYLE);
   TAR.watchHover(fbHoverChrome);
-  TAR.hidePlatformMuteButtons();
-  const inReelViewer = location.pathname.startsWith('/reel/');
-  if (inReelViewer) watchReelCaptions();
+  const inViewer = inReelViewer();
+  if (inViewer) watchReelCaptions();
   for (const video of document.querySelectorAll('video')) {
     const width = video.getBoundingClientRect().width;
-    if (width === 0) continue;
+    if (width === 0 || !isReel(video)) continue;
     TAR.enableNativeControls(video);
     TAR.hideSeekSliderNear(video);
-    const reelCard = inReelViewer ? layoutReel(video) : null;
+    TAR.hidePlatformMuteButtons(TAR.findPlayerChrome(video));
+    const reelCard = inViewer ? layoutReel(video) : null;
     if (!video._tarFbRestListeners) {
       video._tarFbRestListeners = true;
       video.addEventListener('play', () => restChrome(video));
@@ -244,6 +260,8 @@ TAR.register({
   settingKey: 'videoControlsFacebook',
   passes: [videoPass],
   teardown,
-  // Like IG: an unmute (or mute) carries to the next Reel / feed video.
-  carrySound: true
+  // Like IG: an unmute (or mute) carries to the next Reel.
+  carrySound: true,
+  // A swapped-in video is only known to be a Reel in the Reel viewer.
+  pinUnmanaged: inReelViewer
 });

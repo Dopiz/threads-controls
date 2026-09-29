@@ -12,8 +12,10 @@ const DEFAULTS = {
 // TAR.register() with its storage key and passes; common then loads settings
 // (async) and drives the pass runs, so register always precedes the first run.
 // A site may also pass `teardown`, run (after the shared teardown) when its
-// video-controls toggle is switched off live, to undo its own DOM changes, and
-// `carrySound: true` to carry the user's sound state from clip to clip (below).
+// video-controls toggle is switched off live, to undo its own DOM changes,
+// `carrySound: true` to carry the user's sound state from clip to clip (below),
+// and `pinUnmanaged()` to limit where media-guard pins videos the pass has not
+// picked up yet (default: everywhere the site's controls are on).
 const TAR = {
   settings: { ...DEFAULTS },
   // Page-wide sound state for carrySound sites, else null: whether the user
@@ -23,14 +25,16 @@ const TAR = {
   _passes: [],
   _teardown: null,
   _carrySound: false,
+  _pinUnmanaged: () => true,
   _videoActive: false,
   _timer: null,
 
-  register({ settingKey, passes, teardown, carrySound }) {
+  register({ settingKey, passes, teardown, carrySound, pinUnmanaged }) {
     this._settingKey = settingKey;
     this._passes = passes;
     this._teardown = teardown || null;
     this._carrySound = !!carrySound;
+    if (pinUnmanaged) this._pinUnmanaged = pinUnmanaged;
     this.resetSound();
   },
 
@@ -52,9 +56,11 @@ const TAR = {
       // Published for media-guard.js (MAIN world): the level to pin videos the
       // debounced pass has not picked up yet. Written only on change — this
       // runs every pass, and the platforms observe <html>.
-      const level = String(this.defaultLevel());
-      if (document.documentElement.dataset.tarDefaultVolume !== level) {
-        document.documentElement.dataset.tarDefaultVolume = level;
+      const html = document.documentElement.dataset;
+      const level = this._pinUnmanaged() ? String(this.defaultLevel()) : undefined;
+      if (html.tarDefaultVolume !== level) {
+        if (level === undefined) delete html.tarDefaultVolume;
+        else html.tarDefaultVolume = level;
       }
     } else if (this._videoActive) {
       this._videoActive = false;
@@ -115,12 +121,18 @@ TAR.ensureStyle = function (id, css) {
 // We hide that button via an injected !important class so a platform
 // hover/re-render that sets an inline display can't bring it back, and re-tag
 // every pass in case React swaps the node.
-TAR.hidePlatformMuteButtons = function () {
+// `groups` limits the scan to those player groups (a site that manages only
+// some of its videos passes theirs).
+TAR.hidePlatformMuteButtons = function (groups = null) {
   TAR.ensureStyle('tar-mute-style', '.tar-hide-mute{display:none !important;}');
   // The platform mute button lives inside the Video player group on all three
   // sites. Scan only those groups' svgs (a page has hundreds of icons and this
   // runs every 300ms); fall back to a full-page scan on older DOM without them.
-  const groups = document.querySelectorAll('div[aria-label="Video player"]');
+  if (groups) {
+    if (!groups.length) return;
+  } else {
+    groups = document.querySelectorAll('div[aria-label="Video player"]');
+  }
   const svgs = groups.length
     ? Array.from(groups, (g) => g.querySelectorAll('svg')).flatMap((n) => Array.from(n))
     : document.querySelectorAll('svg');

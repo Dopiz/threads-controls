@@ -3,8 +3,9 @@ const { load, setSettings, flush, VIDEO } = require('./harness');
 
 // FB layout: the "Video player" chrome is a sibling overlay covering the video,
 // holding the caption/owner block and FB's own control row (buttons + a seek
-// slider labelled "Change Position", which FB does not translate).
-const PLAYER = `
+// slider labelled "Change Position", which FB does not translate). FB is
+// handled for Reels only; the /reel/ link on the card makes this one.
+const VIDEO_POST = `
   <div style="position:relative;width:640px;height:360px">
     ${VIDEO()}
     <div aria-label="Video player" id="chrome" style="position:absolute;inset:0">
@@ -17,6 +18,18 @@ const PLAYER = `
       </div>
     </div>
   </div>`;
+const PLAYER = VIDEO_POST.replace('<a role="link" id="owner" href="#">', '<a role="link" id="owner" href="/reel/123/">');
+
+test('regular (non-Reel) videos are left entirely to FB', async ({ page }) => {
+  await load(page, { site: 'facebook', html: VIDEO_POST });
+  expect(await page.evaluate(() => document.querySelector('video').controls)).toBe(false);
+  await expect(page.locator('#chrome')).not.toHaveClass(/tar-fb/);
+  await expect(page.locator('#mute')).toBeVisible();
+  await expect(page.locator('#row')).toBeVisible();
+  // ...and media-guard does not pin its volume (only the Reel viewer publishes a default).
+  await expect(page.locator('html')).not.toHaveAttribute('data-tar-default-volume', /.*/);
+  expect(await page.evaluate(() => { const v = document.querySelector('video'); v.volume = 1; return v.volume; })).toBe(1);
+});
 
 test('hides FB’s own control row and mute button, keeps the caption/owner block', async ({ page }) => {
   await load(page, { site: 'facebook', html: PLAYER });
