@@ -44,16 +44,12 @@ jobs:
           git push origin "v${{ github.event.inputs.releaseVersion }}"
 
       - name: Package extension
+        # Whitelist of the extension's runtime files only (no tests or dev
+        # tooling) — a new runtime file outside these paths must be added here.
         run: |
-          zip -r "threads-controls-v${{ github.event.inputs.releaseVersion }}.zip" . \
-            -x "*.git*" \
-            -x ".github/*" \
-            -x ".claude/*" \
-            -x ".playwright-cli/*" \
-            -x "*.md" \
-            -x "*.sh" \
-            -x "*.DS_Store" \
-            -x "*.zip"
+          zip -r "threads-controls-v${{ github.event.inputs.releaseVersion }}.zip" \
+            manifest.json icon.png src \
+            -x "*.DS_Store"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

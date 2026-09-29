@@ -115,7 +115,10 @@ function clipControlBarStrip(video) {
   for (const el of document.elementsFromPoint(cx, barY)) {
     if (el === video || el.tagName === 'VIDEO' || el.contains(video)) break;
     const clipBottom = el.getBoundingClientRect().bottom - stripTop;
-    if (clipBottom > 0) el.style.clipPath = 'inset(0 0 ' + Math.ceil(clipBottom) + 'px 0)';
+    if (clipBottom > 0) {
+      el.style.clipPath = 'inset(0 0 ' + Math.ceil(clipBottom) + 'px 0)';
+      el.dataset.tarClipped = '1';
+    }
   }
   video.dataset.clipSig = sig;
 }
@@ -140,10 +143,13 @@ function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
   TAR.hidePlatformMuteButtons();
   TAR.watchHover(hoverHideChrome);
+  // The media viewer (lightbox) lives at .../post/<id>/media; elsewhere a tall
+  // video is just a big post video (e.g. the main one on a post page).
+  const inViewer = /\/media\/?$/.test(location.pathname);
   for (const video of document.querySelectorAll('video')) {
     const rect = video.getBoundingClientRect();
     if (rect.width === 0) continue;
-    const mainPlayer = rect.height > window.innerHeight * 0.5;
+    const mainPlayer = inViewer && rect.height > window.innerHeight * 0.5;
     const centered = Math.abs((rect.left + rect.width / 2) - window.innerWidth / 2) < window.innerWidth * 0.25;
     if (mainPlayer && !centered) {
       // Off-center preloaded neighbor in the media viewer: the lightbox
@@ -169,7 +175,20 @@ function videoPass() {
   }
 }
 
+function teardown() {
+  for (const el of document.querySelectorAll('[data-tar-clipped]')) {
+    el.style.clipPath = '';
+    delete el.dataset.tarClipped;
+  }
+  for (const video of document.querySelectorAll('video')) {
+    delete video.dataset.tarKeepChrome;
+    delete video.dataset.clipSig;
+    hoverHideChrome(video, false);
+  }
+}
+
 TAR.register({
   settingKey: 'videoControlsThreads',
-  passes: [revealSpoilerText, revealSpoilerMedia, videoPass]
+  passes: [revealSpoilerText, revealSpoilerMedia, videoPass],
+  teardown
 });
