@@ -15,8 +15,8 @@ const DEFAULTS = {
 // A site may also pass `teardown`, run (after the shared teardown) when its
 // video-controls toggle is switched off live, to undo its own DOM changes,
 // `carrySound: true` to carry the user's sound state from clip to clip (below),
-// and `pinUnmanaged()` to limit where media-guard pins videos the pass has not
-// picked up yet (default: everywhere the site's controls are on).
+// and `pinPaths` to limit where media-guard pins videos the pass has not picked
+// up yet (default: everywhere the site's controls are on).
 const TAR = {
   settings: { ...DEFAULTS },
   // Page-wide sound state for carrySound sites, else null: whether the user
@@ -26,16 +26,16 @@ const TAR = {
   _passes: [],
   _teardown: null,
   _carrySound: false,
-  _pinUnmanaged: () => true,
+  _pinPaths: null,
   _videoActive: false,
   _timer: null,
 
-  register({ settingKey, passes, teardown, carrySound, pinUnmanaged }) {
+  register({ settingKey, passes, teardown, carrySound, pinPaths }) {
     this._settingKey = settingKey;
     this._passes = passes;
     this._teardown = teardown || null;
     this._carrySound = !!carrySound;
-    if (pinUnmanaged) this._pinUnmanaged = pinUnmanaged;
+    if (pinPaths) this._pinPaths = pinPaths.join();
     this.resetSound();
   },
 
@@ -55,14 +55,14 @@ const TAR = {
     if (this.videoControlsEnabled()) {
       this._videoActive = true;
       // Published for media-guard.js (MAIN world): the level to pin videos the
-      // debounced pass has not picked up yet. Written only on change — this
-      // runs every pass, and the platforms observe <html>.
+      // debounced pass has not picked up yet, and where. The paths go along, not
+      // a per-page decision: the platforms change pages and start playing long
+      // before a pass runs. Written only on change — this runs every pass, and
+      // the platforms observe <html>.
       const html = document.documentElement.dataset;
-      const level = this._pinUnmanaged() ? String(this.defaultLevel()) : undefined;
-      if (html.tarDefaultVolume !== level) {
-        if (level === undefined) delete html.tarDefaultVolume;
-        else html.tarDefaultVolume = level;
-      }
+      const level = String(this.defaultLevel());
+      if (html.tarDefaultVolume !== level) html.tarDefaultVolume = level;
+      if (this._pinPaths && html.tarPinPaths !== this._pinPaths) html.tarPinPaths = this._pinPaths;
     } else if (this._videoActive) {
       this._videoActive = false;
       this.resetSound();
@@ -382,17 +382,21 @@ TAR.disableNativeControls = function (video) {
   if (video.controls === true) video.controls = false;
 };
 
+// Hand a video back to the platform: its per-video listeners stay but go inert.
+TAR.releaseVideo = function (video) {
+  if (video.dataset.controlsEnabled !== 'true') return;
+  video.controls = false;
+  video._tarSound = null;
+  for (const key of ['controlsEnabled', 'desiredVolume', 'tarJsMuteAt']) delete video.dataset[key];
+};
+
 // The site's toggle was switched off live: hand every video and the shared
 // DOM tweaks back to the platform. Dropping desiredVolume/tarDefaultVolume also
-// releases the MAIN-world guards; the per-video listeners stay but go inert.
+// releases the MAIN-world guards.
 TAR.teardownVideoControls = function () {
   delete document.documentElement.dataset.tarDefaultVolume;
-  for (const video of document.querySelectorAll('video')) {
-    if (video.dataset.controlsEnabled !== 'true') continue;
-    video.controls = false;
-    video._tarSound = null;
-    for (const key of ['controlsEnabled', 'desiredVolume', 'tarJsMuteAt']) delete video.dataset[key];
-  }
+  delete document.documentElement.dataset.tarPinPaths;
+  for (const video of document.querySelectorAll('video')) TAR.releaseVideo(video);
   TAR.ambientLight([]);
   for (const el of document.querySelectorAll('.tar-hide-mute')) el.classList.remove('tar-hide-mute');
   for (const slider of document.querySelectorAll('div[role="slider"][data-seek-hidden="true"]')) {
