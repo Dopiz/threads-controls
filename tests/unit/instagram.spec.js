@@ -32,3 +32,26 @@ test('switching Instagram off shows the chrome again', async ({ page }) => {
   await expect(page.locator('#chrome')).not.toHaveClass(/tar-ig-chrome/);
   await expect(page.locator('#chrome')).toBeVisible();
 });
+
+test('ambient light: only the clip on screen is lit, and it relights on the way back', async ({ page }) => {
+  const clip = (id) => `<div style="overflow:hidden;width:640px">${VIDEO(`id="${id}"`)}</div>`;
+  await load(page, {
+    site: 'instagram',
+    url: 'https://www.instagram.com/reels/abc/',
+    html: `<div style="margin-left:300px">${clip('a')}<div style="height:900px"></div>${clip('b')}<div style="height:900px"></div></div>`
+  });
+  const lit = () => page.evaluate(() => Array.from(document.querySelectorAll('canvas[data-tar-ambient="lit"]'),
+    (glow) => glow.nextElementSibling.querySelector('video').id));
+  const showClip = (id) => page.evaluate((i) => {
+    const video = document.getElementById(i);
+    video.scrollIntoView();
+    return video.play();
+  }, id);
+
+  await showClip('a');
+  await expect.poll(lit).toEqual(['a']);
+  await showClip('b');
+  await expect.poll(lit).toEqual(['b']);
+  await showClip('a');
+  await expect.poll(lit).toEqual(['a']);
+});

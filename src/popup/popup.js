@@ -33,7 +33,7 @@ chrome.storage.sync.get(DEFAULTS, (settings) => {
     button.classList.toggle('off', !settings[key]);
   }
   sliderVolume.value = settings.defaultVolume;
-  volumeValue.textContent = settings.defaultVolume + '%';
+  volumeValue.textContent = sliderVolume.value + '%'; // (a stored 0% shows as the minimum)
 });
 
 toggleText.addEventListener('change', () => {

@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { load, setSettings, flush, VIDEO } = require('./harness');
+const { load, setSettings, runPasses, flush, VIDEO } = require('./harness');
 
 // FB layout: the "Video player" chrome is a sibling overlay covering the video,
 // holding the caption/owner block and FB's own control row (buttons + a seek
@@ -179,6 +179,80 @@ test.describe('Reel viewer (/reel/<id>)', () => {
     const caption = await page.locator('#caption').boundingBox();
     expect(caption.x).toBe(200);
     expect(caption.y + caption.height).toBe(40 + 620 - 60);
+  });
+
+  // A wide clip: the card and FB's like/comment/share column in one stage, with
+  // too little room to its left for the caption.
+  const STAGE = (left) => `
+    <div id="stage" style="position:absolute;left:${left}px;top:40px;width:422px;height:620px;display:flex">
+      <div style="position:relative;width:350px;height:620px">${REEL.replace('left:500px;top:40px', 'left:0;top:0')}</div>
+      <div id="actions" style="width:72px"></div>
+    </div>`;
+  const cardX = async (page) => (await page.locator('#card').boundingBox()).x;
+
+  test('a wide clip slides right, with its actions, to fit a narrower caption beside it', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 720 });
+    await load(page, { site: 'facebook', url, html: STAGE(200) });
+    await expect(page.locator('#card')).toHaveClass(/tar-fb-reel-card/);
+    expect(await cardX(page)).toBe(320);
+    expect((await page.locator('#actions').boundingBox()).x).toBe(320 + 350);
+    const caption = await page.locator('#caption').boundingBox();
+    expect(caption.width).toBe(280);
+    expect(caption.x + caption.width).toBeLessThanOrEqual(320 - 20);
+    await runPasses(page);
+    expect(await cardX(page)).toBe(320); // still there: its own slide is not room
+  });
+
+  test('a clip too wide to slide shrinks to fit, with the caption at its full size', async ({ page }) => {
+    await page.setViewportSize({ width: 700, height: 720 });
+    await load(page, { site: 'facebook', url, html: STAGE(200) });
+    await expect(page.locator('#card')).toHaveClass(/tar-fb-reel-narrow/);
+    const card = await page.locator('#card').boundingBox();
+    const actions = await page.locator('#actions').boundingBox();
+    expect(card.x).toBe(320);
+    expect(card.width).toBeLessThan(350);
+    expect(actions.x + actions.width).toBeLessThanOrEqual(700 - 80);
+    const caption = await page.locator('#caption').boundingBox();
+    expect(Math.round(caption.width)).toBe(280);
+    expect(caption.x + caption.width).toBeLessThanOrEqual(320 - 10);
+    expect(caption.x).toBeGreaterThanOrEqual(0);
+    await runPasses(page);
+    expect((await page.locator('#card').boundingBox()).width).toBe(card.width); // settled
+  });
+
+  test('in a window too small to shrink into, the caption stays on the video', async ({ page }) => {
+    await page.setViewportSize({ width: 500, height: 720 });
+    await load(page, { site: 'facebook', url, html: STAGE(200) });
+    await expect(page.locator('#card')).toHaveClass(/tar-fb-reel-inset/);
+    expect(await cardX(page)).toBe(200);
+  });
+
+  test('room for the narrower caption only: it narrows, nothing slides', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 720 });
+    await load(page, { site: 'facebook', url, html: STAGE(340) });
+    await expect(page.locator('#card')).toHaveClass(/tar-fb-reel-narrow/);
+    expect(await cardX(page)).toBe(340);
+    expect((await page.locator('#caption').boundingBox()).width).toBe(280);
+  });
+
+  test('a clip that no longer needs the slide goes back', async ({ page }) => {
+    await page.setViewportSize({ width: 500, height: 720 });
+    await load(page, { site: 'facebook', url, html: STAGE(200) });
+    await page.setViewportSize({ width: 1200, height: 720 });
+    await runPasses(page);
+    expect(await cardX(page)).toBe(320);
+    await page.setViewportSize({ width: 500, height: 720 });
+    await runPasses(page);
+    expect(await cardX(page)).toBe(200);
+  });
+
+  test('switching Facebook off undoes the slide', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 720 });
+    await load(page, { site: 'facebook', url, html: STAGE(200) });
+    await setSettings(page, { videoControlsFacebook: false });
+    await flush(page);
+    expect(await cardX(page)).toBe(200);
+    await expect(page.locator('.tar-fb-reel-stage, .tar-fb-reel-narrow')).toHaveCount(0);
   });
 
   test('outside /reel/ the layout is left alone', async ({ page }) => {

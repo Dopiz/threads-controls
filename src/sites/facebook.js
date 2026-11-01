@@ -29,6 +29,10 @@ const FB_STYLE = [
   // (an expanded caption), capped at the video's height.
   '  pointer-events: auto !important; max-height: 100% !important; overflow-y: auto !important;',
   '  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.3) transparent; }',
+  // (Inside the scaled stage: scaled back, so its text keeps its size.)
+  '.tar-fb-reel-narrow [data-tar-reel-caption] { width: 280px !important;',
+  '  max-height: calc(100% * var(--tar-reel-scale, 1)) !important;',
+  '  transform: scale(calc(1 / var(--tar-reel-scale, 1))); transform-origin: bottom right; }',
   '.tar-fb-reel-card [data-tar-reel-shade] { display: none !important; }',
   '.tar-fb-reel-inset [data-tar-reel-caption] { bottom: 60px !important; }',
   '.tar-fb-reel-hide { display: none !important; }',
@@ -102,8 +106,11 @@ function hideFbControlRow(chrome) {
 // Reel viewer (/reel/<id>): its caption block — owner, text, audio ticker, on a
 // bottom gradient — lies over the bottom of the video, right where the native
 // control bar is, with its own gradient and show/hide timing. Like IG's
-// desktop Reels, it moves out to the left of the video instead — or, when the
-// viewport leaves no room there, up by the bar's height — and FB's own
+// desktop Reels, it moves out to the left of the video instead. A wide clip
+// leaves no room there, so its stage (see findReelStage) slides right to make
+// some, for a narrower caption, and shrinks if that would run into FB's
+// previous/next buttons. Only a window too small for even that (below
+// REEL_MIN_SCALE) keeps the caption on the video, up by the bar's height. FB's own
 // play/pause, mute/volume and search buttons on the card go: the native bar
 // covers those. The card clips its content for the rounded corners, so it is
 // un-clipped and the video takes over the rounding. The layers over the video
@@ -125,6 +132,9 @@ function hideFbControlRow(chrome) {
 // the caption is tagged whenever it (re)appears — right away, from
 // watchReelCaptions, so it is never painted over the video first.
 const REEL_CAPTION_SPACE = 320 + 24 + 16;
+const REEL_NARROW_CAPTION_SPACE = 280 + 24 + 16;
+const REEL_NAV_SPACE = 80; // kept clear at the viewport's right: FB's previous/next
+const REEL_MIN_SCALE = 0.5;
 const REEL_BUTTONS = /暫停|播放|靜音|音量|搜尋|pause|play|mute|volume|search/i;
 
 function findReelCard(video) {
@@ -138,6 +148,18 @@ function findReelCard(video) {
   while (card && card !== document.body && !isCard(card)) card = card.parentElement;
   video._tarReelCard = card && card !== document.body ? card : null;
   return video._tarReelCard;
+}
+
+// The card and FB's like/comment/share column side by side, the block that
+// slides as one: the card's nearest ancestor a column wider than it. Null if the
+// next ancestor up is wider than that, i.e. the column is laid out elsewhere.
+function findReelStage(card) {
+  let stage = card.parentElement;
+  for (let i = 0; i < 4 && stage && stage !== document.body; i++, stage = stage.parentElement) {
+    const extra = stage.offsetWidth - card.offsetWidth;
+    if (extra > 20) return extra < 120 ? stage : null;
+  }
+  return null;
 }
 
 function tagReelCaption(video, card) {
@@ -170,9 +192,28 @@ function layoutReel(video) {
   const card = findReelCard(video);
   if (!card) return null;
   if (!video.style.borderRadius) video.style.borderRadius = getComputedStyle(card).borderRadius;
-  const room = card.getBoundingClientRect().left >= REEL_CAPTION_SPACE;
-  card.classList.toggle('tar-fb-reel-card', room);
-  card.classList.toggle('tar-fb-reel-inset', !room);
+  const stage = findReelStage(card);
+  // Measured as if not slid, or sliding would undo its own reason next pass.
+  const slid = stage ? new DOMMatrix(stage.style.transform).m41 : 0;
+  const left = card.getBoundingClientRect().left - slid;
+  const room = left >= REEL_CAPTION_SPACE;
+  const wanted = Math.max(0, Math.ceil(REEL_NARROW_CAPTION_SPACE - left));
+  // (offsetWidth: the width before any scaling.)
+  const fit = stage ? (window.innerWidth - REEL_NAV_SPACE - left - wanted) / stage.offsetWidth : 0;
+  const narrow = !room && fit >= REEL_MIN_SCALE;
+  const slide = narrow ? wanted : 0;
+  const scale = narrow ? Math.floor(Math.min(1, fit) * 1000) / 1000 : 1;
+  if (stage) {
+    const moved = slide > 0 || scale < 1;
+    stage.classList.toggle('tar-fb-reel-stage', moved);
+    stage.style.transformOrigin = moved ? 'left center' : '';
+    stage.style.transform = moved ? `translateX(${slide}px) scale(${scale})` : '';
+    if (moved) stage.style.setProperty('--tar-reel-scale', scale);
+    else stage.style.removeProperty('--tar-reel-scale');
+  }
+  card.classList.toggle('tar-fb-reel-card', room || narrow);
+  card.classList.toggle('tar-fb-reel-narrow', narrow);
+  card.classList.toggle('tar-fb-reel-inset', !room && !narrow);
   tagReelCaption(video, card);
   const caption = card.querySelector('[data-tar-reel-caption]');
   for (const el of card.querySelectorAll('div[role="button"], div[role="slider"]')) {
@@ -255,8 +296,12 @@ function videoPass() {
 function teardown() {
   clearTimeout(idleTimer);
   for (const video of document.querySelectorAll('video')) fbHoverChrome(video, false);
+  for (const stage of document.querySelectorAll('.tar-fb-reel-stage')) {
+    stage.style.transform = stage.style.transformOrigin = '';
+    stage.style.removeProperty('--tar-reel-scale');
+  }
   const classes = ['tar-fb-chrome', 'tar-fb-show', 'tar-fb-compact', 'tar-fb-rest', 'tar-fb-bar',
-    'tar-fb-reel-card', 'tar-fb-reel-inset', 'tar-fb-reel-chrome', 'tar-fb-reel-hide'];
+    'tar-fb-reel-card', 'tar-fb-reel-narrow', 'tar-fb-reel-inset', 'tar-fb-reel-stage', 'tar-fb-reel-chrome', 'tar-fb-reel-hide'];
   for (const el of document.querySelectorAll(classes.map((c) => '.' + c).join(', '))) el.classList.remove(...classes);
   for (const el of document.querySelectorAll('[data-tar-reel-caption], [data-tar-reel-shade], [data-tar-reel-overlay]')) {
     delete el.dataset.tarReelCaption;
