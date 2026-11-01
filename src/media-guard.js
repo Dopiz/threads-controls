@@ -17,12 +17,15 @@
 
   // The level a video should play at: its own desired level once managed;
   // before that, the page default the extension publishes on <html> while the
-  // site's controls are on (absent when off, so nothing is touched).
+  // site's controls are on (absent when off, so nothing is touched), on the
+  // paths it publishes with it, if any.
   const levelFor = (el) => {
     const desired = el.dataset ? parseFloat(el.dataset.desiredVolume) : NaN;
     if (!isNaN(desired)) return desired;
     if (!isVideo(el)) return NaN;
-    return parseFloat(document.documentElement.dataset.tarDefaultVolume);
+    const html = document.documentElement.dataset;
+    if (html.tarPinPaths && !html.tarPinPaths.split(',').some((p) => location.pathname.startsWith(p))) return NaN;
+    return parseFloat(html.tarDefaultVolume);
   };
 
   // 1. Volume: the platform force-sets volume (often 100%) in the same batch as

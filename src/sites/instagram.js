@@ -3,6 +3,13 @@
 // chrome groups directly via an injected style + a re-tagged class each pass.
 // Sound carries from clip to clip (carrySound): scrolling Reels/the feed keeps
 // the user's last mute/unmute and level, like IG's own player does.
+//
+// Stories (/stories/) stay IG's: its own sound button and tap areas run them, so
+// no native bar and no carried sound there. They only take the default level
+// (media-guard pins videos the extension doesn't manage), which would leave IG's
+// volume track dead, so it is hidden: the track only, since the sound button is
+// inside the same div[role="slider"].
+const inStories = () => location.pathname.startsWith('/stories/');
 
 // Reels viewer (/reels/, /reels/<id>/: the swipeable feed): each clip is lit
 // (TAR.ambientLight) from behind its rounded card, the nearest clipping ancestor.
@@ -15,7 +22,14 @@ function reelCard(video) {
 
 function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
-  TAR.ensureStyle('tar-ig-style', '.tar-ig-chrome { display: none !important; }');
+  TAR.ensureStyle('tar-ig-style', '.tar-ig-chrome, .tar-ig-stories [role="slider"] > div > :not([role="button"]) { display: none !important; }');
+  const stories = inStories();
+  document.documentElement.classList.toggle('tar-ig-stories', stories);
+  if (stories) {
+    for (const video of document.querySelectorAll('video')) TAR.releaseVideo(video);
+    TAR.ambientLight([]);
+    return;
+  }
   TAR.hidePlatformMuteButtons();
   const lit = [];
   for (const video of document.querySelectorAll('video')) {
@@ -35,6 +49,7 @@ function videoPass() {
 }
 
 function teardown() {
+  document.documentElement.classList.remove('tar-ig-stories');
   for (const el of document.querySelectorAll('.tar-ig-chrome')) el.classList.remove('tar-ig-chrome');
 }
 

@@ -33,7 +33,7 @@ Click the extension icon to open the popup:
 |--------|-------------|
 | **Site icons** | Click the Threads / Instagram / Facebook icons to enable or disable native video controls per site (grayed out = disabled). On Facebook only Reels are handled; regular videos keep FB's own player. Default: only Threads enabled |
 | **Ambient Light** | Light the Reels viewer on Instagram and Facebook with a soft glow in the playing video's colours (with those sites' video controls on). Default: off |
-| **Default Volume** | Set the default volume level (1–100%) for all videos |
+| **Default Volume** | Set the default volume level (1–100%) for all videos, Instagram and Facebook Stories included (with those sites' video controls on) |
 
 Videos default to muted — when unmuted, they play at the configured volume. On Instagram and Facebook the sound carries from clip to clip: after you unmute (or mute), the next Reel or video starts the same way, at the volume you last set. Site toggles and the default volume apply immediately, without reloading the page.
 

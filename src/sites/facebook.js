@@ -229,7 +229,7 @@ let reelObserver = null;
 function watchReelCaptions() {
   if (reelObserver) return;
   reelObserver = new MutationObserver((mutations) => {
-    if (!location.pathname.startsWith('/reel/') || !TAR.videoControlsEnabled()) return;
+    if (!inReelViewer() || !TAR.videoControlsEnabled()) return;
     for (const video of document.querySelectorAll('video')) {
       const card = video._tarReelCard;
       if (!card || !card.isConnected || card.querySelector('[data-tar-reel-caption]')) continue;
@@ -239,11 +239,15 @@ function watchReelCaptions() {
   reelObserver.observe(document.body, { childList: true, subtree: true });
 }
 
+const REEL_PATH = '/reel/';
+const STORIES_PATH = '/stories/';
+const inReelViewer = () => location.pathname.startsWith(REEL_PATH);
+const inStories = () => location.pathname.startsWith(STORIES_PATH);
+
 // Facebook: Reels only — the Reel viewer, and Reels elsewhere (the feed's
 // Reels cards, shared Reels), recognized by a /reel/ link on the video's own
 // card: its ancestors up to where they grow well past the video. Regular
 // videos (feed posts, /watch, /videos) are left entirely to FB.
-const inReelViewer = () => location.pathname.startsWith('/reel/');
 function isReel(video) {
   if (video._tarIsReel || inReelViewer() || video.closest('a[href*="/reel/"]')) return (video._tarIsReel = true);
   const vr = video.getBoundingClientRect();
@@ -259,6 +263,14 @@ function videoPass() {
   if (!TAR.videoControlsEnabled()) return;
   TAR.ensureStyle('tar-fb-style', FB_STYLE);
   TAR.watchHover(fbHoverChrome);
+  if (inStories()) {
+    // media-guard pins FB's writes; this catches a Story playing before the
+    // level was published, on a page opened right at it.
+    const level = TAR.defaultLevel();
+    for (const video of document.querySelectorAll('video')) video.volume = level;
+    TAR.ambientLight([]);
+    return;
+  }
   const inViewer = inReelViewer();
   if (inViewer) watchReelCaptions();
   const lit = [];
@@ -320,6 +332,8 @@ TAR.register({
   teardown,
   // Like IG: an unmute (or mute) carries to the next Reel.
   carrySound: true,
-  // A swapped-in video is only known to be a Reel in the Reel viewer.
-  pinUnmanaged: inReelViewer
+  // A swapped-in video is only known to be a Reel in the Reel viewer. Stories
+  // stay FB's otherwise (no native bar), but start with sound on at 100%, with
+  // no volume slider of their own: they just take the default level.
+  pinPaths: [REEL_PATH, STORIES_PATH]
 });

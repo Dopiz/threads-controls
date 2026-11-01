@@ -26,8 +26,7 @@ test('regular (non-Reel) videos are left entirely to FB', async ({ page }) => {
   await expect(page.locator('#chrome')).not.toHaveClass(/tar-fb/);
   await expect(page.locator('#mute')).toBeVisible();
   await expect(page.locator('#row')).toBeVisible();
-  // ...and media-guard does not pin its volume (only the Reel viewer publishes a default).
-  await expect(page.locator('html')).not.toHaveAttribute('data-tar-default-volume', /.*/);
+  // ...and media-guard does not pin its volume (only on the Reel viewer and Stories).
   expect(await page.evaluate(() => { const v = document.querySelector('video'); v.volume = 1; return v.volume; })).toBe(1);
 });
 
@@ -268,5 +267,61 @@ test.describe('Reel viewer (/reel/<id>)', () => {
     await expect(page.locator('.tar-fb-reel-card, .tar-fb-reel-hide, [data-tar-reel-caption], [data-tar-reel-overlay]')).toHaveCount(0);
     await expect(page.locator('#search')).toBeVisible();
     await expect(page.locator('#card')).toHaveCSS('overflow', 'hidden');
+  });
+});
+
+test.describe('Stories', () => {
+  const url = 'https://www.facebook.com/stories/123/abc/';
+  const STORY = VIDEO('id="v"');
+  // FB's own writes on opening a Story: full volume, sound on.
+  const platformPlays = (page) => page.evaluate(() => {
+    const video = document.getElementById('v');
+    video.volume = 1;
+    video.muted = false;
+    return video.play();
+  });
+  const video = (page) => page.evaluate(() => {
+    const { muted, paused, volume, controls } = document.getElementById('v');
+    return { muted, paused, volume: +volume.toFixed(3), controls };
+  });
+
+  test('play at the default volume, and otherwise stay FB’s', async ({ page }) => {
+    await load(page, { site: 'facebook', url, html: STORY });
+    await platformPlays(page);
+    expect(await video(page)).toEqual({ muted: false, paused: false, volume: 0.1, controls: false });
+  });
+
+  test('opened from another page: pinned from FB’s first write, before any pass runs', async ({ page }) => {
+    await load(page, { site: 'facebook', url: 'https://www.facebook.com/', html: STORY });
+    await page.evaluate(() => history.pushState({}, '', '/stories/123/abc/'));
+    await platformPlays(page);
+    expect(await video(page)).toMatchObject({ muted: false, volume: 0.1 });
+  });
+
+  test('a page opened right at a Story: already playing, it takes the level too', async ({ page }) => {
+    await load(page, { site: 'facebook', url, html: STORY, beforeLoad: `
+      document.getElementById('v').muted = false;
+      document.getElementById('v').play();` });
+    expect((await video(page)).volume).toBe(0.1);
+  });
+
+  test('FB’s mute button keeps working', async ({ page }) => {
+    await load(page, { site: 'facebook', url, html: STORY });
+    await platformPlays(page);
+    await page.evaluate(() => { document.getElementById('v').muted = true; });
+    await flush(page);
+    expect((await video(page)).muted).toBe(true);
+  });
+
+  test('are left alone with Facebook’s video controls off', async ({ page }) => {
+    await load(page, { site: 'facebook', url, html: STORY, settings: { videoControlsFacebook: false } });
+    await platformPlays(page);
+    expect((await video(page)).volume).toBe(1);
+  });
+
+  test('a regular page is not pinned', async ({ page }) => {
+    await load(page, { site: 'facebook', url: 'https://www.facebook.com/watch/', html: STORY });
+    await platformPlays(page);
+    expect((await video(page)).volume).toBe(1);
   });
 });

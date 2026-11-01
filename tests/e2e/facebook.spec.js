@@ -12,7 +12,8 @@ test.describe('Facebook', () => {
     test.skip(list.length === 0, 'fixture has no video any more — update tests/e2e/urls.js');
     expect(list.every((v) => !v.controls && v.desired === undefined)).toBe(true);
     await expect(page.locator('[class*="tar-fb"], .tar-hide-mute')).toHaveCount(0);
-    await expect(page.locator('html')).not.toHaveAttribute('data-tar-default-volume', /.*/);
+    // ...and media-guard does not pin its volume (only on the Reel viewer and Stories).
+    expect(await page.evaluate(() => { const v = document.querySelector('video'); v.volume = 1; return v.volume; })).toBe(1);
   });
 
   test('Reel viewer: caption moves out to the left, FB’s duplicate buttons go, the native bar is reachable', async ({ page }) => {
