@@ -48,7 +48,7 @@ const TAR = {
   },
 
   defaultLevel() {
-    return this.settings.defaultVolume / 100;
+    return Math.max(1, this.settings.defaultVolume) / 100; // (0% was once allowed)
   },
 
   runPasses() {
@@ -215,26 +215,13 @@ document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 // Per-video sound bookkeeping, only read here in the isolated world (the MAIN
 // world sees just the dataset keys controlsEnabled, desiredVolume and
 // tarJsMuteAt). prevMuted: the muted state as of the last volumechange
-// handled; seekAt/playAt/unmuteAt/selfAt: when a seek, a play, an unmute or an
-// extension-side write last happened (ms).
+// handled; jsMuteAt: the tarJsMuteAt stamp as of then; seekAt/playAt/unmuteAt:
+// when a seek, a play or an unmute last happened (ms).
 const soundState = (video) => video._tarSound || (video._tarSound = {
-  prevMuted: video.muted, seekAt: 0, playAt: 0, unmuteAt: 0, selfAt: 0
+  prevMuted: video.muted, jsMuteAt: video.dataset.tarJsMuteAt,
+  seekAt: 0, playAt: 0, unmuteAt: 0
 });
 
-// Where the latest `muted` flip came from. media-guard.js stamps every page-JS
-// (platform) write and markSelfWrite the extension's own; a flip with neither
-// stamp came from the browser's native control bar — the user.
-TAR.mutedChangeOrigin = function (video) {
-  const now = Date.now();
-  if (now - soundState(video).selfAt < 150) return 'self';
-  if (now - Number(video.dataset.tarJsMuteAt || 0) < 150) return 'platform';
-  return 'user';
-};
-
-// Stamp an extension-side `muted` write so the flip is not read as the user's.
-TAR.markSelfWrite = function (video) {
-  soundState(video).selfAt = Date.now();
-};
 
 // Set the level a video should hold (media-guard pins platform writes to it).
 TAR.setLevel = function (video, level) {
@@ -255,7 +242,6 @@ TAR.onScreen = function (video) {
 TAR.applyCarriedSound = function (video) {
   const state = soundState(video);
   TAR.setLevel(video, TAR.sound.volume ?? TAR.defaultLevel());
-  TAR.markSelfWrite(video);
   video.muted = TAR.sound.muted;
   state.prevMuted = video.muted;
   if (!video.muted) state.unmuteAt = Date.now();
@@ -291,6 +277,7 @@ TAR.enableNativeControls = function (video) {
   video.dataset.controlsEnabled = 'true';
   video.style.objectFit = 'cover';
   video._tarSound = null; // fresh bookkeeping, also after a live toggle-off/on
+  soundState(video); // now, not on first use: the user's unmute must find prevMuted
   TAR.setLevel(video, TAR.defaultLevel());
   if (TAR.sound) {
     observeCarry(video);
@@ -313,7 +300,6 @@ TAR.enableNativeControls = function (video) {
   // which case each clip picks up the page-wide state (see wantsCarriedSound).
   const restoreSound = () => {
     soundState(video).unmuteAt = Date.now();
-    TAR.markSelfWrite(video);
     video.muted = false;
     video.volume = Number(video.dataset.desiredVolume);
   };
@@ -343,14 +329,22 @@ TAR.enableNativeControls = function (video) {
     const offDesired = Math.abs(video.volume - desired) > 0.005;
     const now = Date.now();
 
-    if (TAR.sound && video.muted !== state.prevMuted) {
-      const origin = TAR.mutedChangeOrigin(video);
-      if (origin === 'user') {
-        // The user's own mute/unmute sets the state the next clips carry.
-        TAR.sound.muted = video.muted;
-      } else if (origin === 'platform' && TAR.wantsCarriedSound(video)) {
-        TAR.applyCarriedSound(video);
-        return;
+    if (TAR.sound) {
+      // media-guard.js stamps every page-JS (platform) write; a flip with no new
+      // stamp came from the browser's native control bar — the user. Compared by
+      // value, not age: on a busy page this runs long after the write. The
+      // extension's own writes need no stamp, they update prevMuted as they go.
+      const stamp = video.dataset.tarJsMuteAt;
+      const byUser = stamp === state.jsMuteAt;
+      state.jsMuteAt = stamp;
+      if (video.muted !== state.prevMuted) {
+        if (byUser) {
+          // The user's own mute/unmute sets the state the next clips carry.
+          TAR.sound.muted = video.muted;
+        } else if (TAR.wantsCarriedSound(video)) {
+          TAR.applyCarriedSound(video);
+          return;
+        }
       }
     }
 
@@ -511,11 +505,19 @@ function ambientLoop(now) {
 
 // Redraw each glow on screen while its picture changes (playing, seeked, or a
 // new clip in the element), for a few frames past the change so the blend
-// settles, then leave it be. Cheapest checks first: most glows (paused or
-// preloaded clips) stop at the settle count, before any layout read.
+// settles, then leave it be. Cheapest checks first: most unlit glows (preloaded
+// clips) stop at the settle count, before any layout read. A glow is lit only
+// while its clip holds the screen: the one scrolled away fades out (it reaches
+// past its card, into the next clip's), and relights on the way back.
 function drawGlows() {
   for (const glow of ambientGlows) {
     const video = glow._tarVideo;
+    const lit = glow.dataset.tarAmbient === 'lit';
+    if (lit && !TAR.onScreen(video)) {
+      glow.dataset.tarAmbient = '';
+      glow._tarTime = null;
+      continue;
+    }
     if (!glow._tarFrame || video.readyState < 2) continue;
     if (video.currentTime !== glow._tarTime || video.currentSrc !== glow._tarSrc) {
       const fresh = glow._tarTime == null || video.currentSrc !== glow._tarSrc;
@@ -525,8 +527,7 @@ function drawGlows() {
       if (fresh) glow._tarBlend = 1;
     }
     if (!glow._tarSettle) continue;
-    const r = video.getBoundingClientRect();
-    if (r.bottom < 0 || r.top > window.innerHeight) continue;
+    if (!lit && !TAR.onScreen(video)) continue;
     glow._tarSettle--;
     const [x, y, w, h] = glow._tarFrame;
     const ctx = glow.getContext('2d');

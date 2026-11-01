@@ -2,7 +2,7 @@
 // (TAR.sound): after an unmute (or mute), the next Reel / feed video starts
 // the same way, at the level last set. Threads keeps it per clip (common.spec).
 const { test, expect } = require('@playwright/test');
-const { load, user, setSettings, flush, settle, VIDEO } = require('./harness');
+const { load, ext, user, setSettings, flush, settle, VIDEO } = require('./harness');
 
 // Scrolling Reels: two clips, the second one below the fold, and a platform
 // that — like IG and FB, whose own mute state stays "muted" since their mute
@@ -31,6 +31,7 @@ for (const [site, key] of [['instagram', 'videoControlsInstagram'], ['facebook',
     // User plays clip A and unmutes it through the native bar.
     async function unmuteA(page) {
       await user(page, () => document.getElementById('a').play());
+      await flush(page, 100); // let the play event through first, as a real click would
       await userSet(page, 'a', 'muted', false);
       await settle(page);
     }
@@ -114,6 +115,36 @@ for (const [site, key] of [['instagram', 'videoControlsInstagram'], ['facebook',
       await page.evaluate(() => document.getElementById('b').scrollIntoView());
       await flush(page, 200);
       expect(await state(page, 'b')).toMatchObject({ paused: false, muted: false, volume: 0.1 });
+    });
+
+    // IG mutes a clip just after its play event, once the extension has already
+    // unmuted it. On a busy page the volumechange only runs well after that write.
+    test('a platform mute handled late is not taken for the user\'s', async ({ page }) => {
+      await load(page, { site, html: REELS, beforeLoad: `
+        document.getElementById('b').addEventListener('play', (e) => {
+          setTimeout(() => {
+            e.target.muted = true;
+            const start = performance.now();
+            while (performance.now() - start < 200);
+          });
+        });
+        document.getElementById('b').muted = true;` });
+      await unmuteA(page);
+      await scrollToB(page);
+      await expect.poll(async () => (await state(page, 'b')).muted).toBe(false);
+      expect(await ext(page, () => TAR.sound.muted)).toBe(false);
+    });
+
+    // Already playing and at the default level: taking it over fires no
+    // volumechange, so the user's unmute is the first one the extension sees.
+    test('an unmute carries from a clip that was playing before the extension took it over', async ({ page }) => {
+      await load(page, { site, html: REELS, settings: { defaultVolume: 100 }, beforeLoad: `
+        document.getElementById('a').muted = true;
+        document.getElementById('a').play();` });
+      await flush(page, 100);
+      await userSet(page, 'a', 'muted', false);
+      await settle(page);
+      expect(await ext(page, () => TAR.sound.muted)).toBe(false);
     });
 
     test('the carried state resets when the site is switched off and on', async ({ page }) => {
